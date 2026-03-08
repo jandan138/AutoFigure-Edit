@@ -24,6 +24,7 @@ Claude Code 通过 Agent tool 分派子任务：
 - 使用 `isolation: "worktree"` 为需要独立代码修改的 agent 提供隔离环境
 
 ## agent_selection_rules
+- Use `researcher` when request is about investigation, feasibility study, technology comparison, or understanding existing code.
 - Use `architect` when request changes pipeline architecture, adds new stages, or modifies provider/backend model.
 - Use `feature-designer` when feature intent must be converted into implementation spec.
 - Use `implementation-engineer` for coding tasks and refactors.
@@ -35,6 +36,7 @@ Claude Code 通过 Agent tool 分派子任务：
 
 ## task_routing
 1. 分类任务类型：
+- Research -> `.claude/workflows/research-workflow.md`
 - Feature -> `.claude/workflows/feature-workflow.md`
 - Bugfix -> `.claude/workflows/bugfix-workflow.md`
 - Pipeline extension -> `.claude/workflows/pipeline-extension.md`
@@ -106,6 +108,13 @@ A task is complete only when all are true:
 - Final summary includes: changes, verification, risks/warnings, and follow-ups.
 
 ## invocation_examples
+
+Research:
+```text
+请读取 .claude/orchestrator.md 并按 research workflow 执行以下调研：
+<调研问题描述>
+要求产出调研报告和可行性结论。
+```
 
 Feature request:
 ```text

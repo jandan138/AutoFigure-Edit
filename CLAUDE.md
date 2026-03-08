@@ -83,6 +83,9 @@ Code comments and docstrings are primarily in Chinese. The codebase uses Python 
 读取 `.claude/orchestrator.md` 获取完整的路由和执行规则，然后按对应 workflow 执行：
 
 ```text
+# Research
+请读取 .claude/orchestrator.md 并按 research workflow 执行以下调研：<调研问题>
+
 # Feature
 请读取 .claude/orchestrator.md 并按 feature workflow 执行以下需求：<需求描述>
 
@@ -97,6 +100,7 @@ Code comments and docstrings are primarily in Chinese. The codebase uses Python 
 
 | Agent | 类型 | 职责 |
 |-------|------|------|
+| researcher | general-purpose | 技术调研、方案可行性分析、代码探索（只读，不改代码） |
 | architect | general-purpose | Pipeline 架构设计、LLM provider 抽象、segmentation backend 选择（仅设计，不改代码） |
 | feature-designer | general-purpose | 将需求转化为实现规格（仅设计，不改代码） |
 | implementation-engineer | general-purpose | 代码实现 |
@@ -110,6 +114,7 @@ Code comments and docstrings are primarily in Chinese. The codebase uses Python 
 
 每个 workflow 均包含 **on_failure 失败处理策略** 和 **worktree 隔离标注**。
 
+- `research-workflow.md`: researcher [→ architect 如涉及架构决策]
 - `feature-workflow.md`: architect → feature-designer → implementation-engineer (worktree) [+ frontend-engineer 如涉及前端] → code-reviewer + doc-writer + test-engineer (并行)
 - `bugfix-workflow.md`: implementation-engineer (worktree) → code-reviewer + doc-writer + test-engineer (并行)
 - `pipeline-extension.md`: architect → pipeline-engineer (worktree) → code-reviewer + doc-writer + test-engineer (并行)
