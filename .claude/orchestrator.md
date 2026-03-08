@@ -9,7 +9,8 @@
 - Frontend: `web/` (index.html, app.js, canvas.html, vendor/svg-edit/)
 - Entry function: `method_to_svg()` at line ~2390
 - LLM providers: openrouter, bianxie, gemini (unified via `call_llm_text/multimodal/image_generation`)
-- SAM3 backends: local, fal, roboflow
+- Segmentation backends: yolo_world (default), owlvit, local, fal, roboflow
+- Background removal: rembg (BiRefNet, default), BriaRMBG2 (fallback)
 - No tests or linting configured
 
 ## claude_code_execution_model
@@ -26,7 +27,7 @@ Claude Code 通过 Agent tool 分派子任务：
 - Use `architect` when request changes pipeline architecture, adds new stages, or modifies provider/backend model.
 - Use `feature-designer` when feature intent must be converted into implementation spec.
 - Use `implementation-engineer` for coding tasks and refactors.
-- Use `pipeline-engineer` for pipeline stage additions, SAM backend integrations, or SVG processing changes.
+- Use `pipeline-engineer` for pipeline stage additions, segmentation backend integrations, or SVG processing changes.
 - Use `code-reviewer` before final completion of any coding workflow.
 - Use `doc-writer` for all documentation updates.
 

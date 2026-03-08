@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AutoFigure-Edit generates editable SVG scientific figures from paper method text. It uses LLMs to generate a raster draft, OWL-ViT (default) or SAM3 for icon segmentation, RMBG-2.0 for background removal, then assembles a final SVG with real icons replacing placeholders. Published at ICLR 2026.
+AutoFigure-Edit generates editable SVG scientific figures from paper method text. It uses LLMs to generate a raster draft, YOLO-World (default) or OWL-ViT for icon segmentation, rembg (BiRefNet) for background removal, then assembles a final SVG with real icons replacing placeholders. Published at ICLR 2026.
 
 ## Commands
 
@@ -37,8 +37,8 @@ The project has two Python files and a static web frontend:
 The `method_to_svg()` function at line ~2390 orchestrates the full pipeline:
 
 1. **Figure Generation** (`generate_figure_from_method`) — Calls LLM to generate a raster figure from method text → `figure.png`
-2. **Icon Segmentation** (`segment_with_sam3`) — Detects icons/regions using OWL-ViT (default) or SAM3 (local/API: fal.ai/Roboflow), merges overlapping boxes → `samed.png` + `boxlib.json`
-3. **Background Removal** (`crop_and_remove_background`, `BriaRMBG2Remover`) — Crops detected regions and removes backgrounds with RMBG-2.0 → `icons/*.png`
+2. **Icon Segmentation** (`segment_with_sam3`) — Detects icons/regions using YOLO-World (default), OWL-ViT, or SAM3 (local/fal/roboflow), merges overlapping boxes → `samed.png` + `boxlib.json`
+3. **Background Removal** (`crop_and_remove_background`, `RembgRemover`) — Crops detected regions and removes backgrounds with rembg (BiRefNet, default) or BriaRMBG2 (fallback) → `icons/*.png`
 4. **SVG Template Generation** (`generate_svg_template`) — LLM generates SVG with AF-style placeholders (`<AF>01`, `<AF>02`...) → `template.svg`
 5. **SVG Validation & Fix** (`check_and_fix_svg`) — Validates SVG with lxml, optionally fixes via LLM
 6. **SVG Optimization** (`optimize_svg_with_llm`) — Optional iterative LLM refinement → `optimized_template.svg`
@@ -46,7 +46,7 @@ The `method_to_svg()` function at line ~2390 orchestrates the full pipeline:
 
 **LLM Provider abstraction:** Three providers (openrouter, bianxie, gemini) each have `_call_{provider}_text`, `_call_{provider}_multimodal`, and `_call_{provider}_image_generation` functions. The unified entry points are `call_llm_text()`, `call_llm_multimodal()`, and `call_llm_image_generation()`.
 
-**Segmentation backends:** `owlvit` (default, Google OWL-ViT zero-shot detection, auto-downloads from HuggingFace), `local` (requires SAM3 installed), `fal` (fal.ai API), `roboflow` (Roboflow API), `api` (generic SAM API). Configured via `--sam_backend`.
+**Segmentation backends:** `yolo_world` (default, YOLO-World zero-shot detection via ultralytics), `owlvit` (Google OWL-ViT), `local` (requires SAM3 installed), `fal` (fal.ai API), `roboflow` (Roboflow API), `api` (generic SAM API). Configured via `--sam_backend`.
 
 ### `server.py` — FastAPI Web Backend
 
@@ -65,7 +65,7 @@ The `method_to_svg()` function at line ~2390 orchestrates the full pipeline:
 ## Key Configuration Flags
 
 - `--placeholder_mode`: `label` (recommended, gray fill + numbered labels), `box` (coordinates), `none`
-- `--sam_backend`: Segmentation backend (`owlvit` [default], `local`, `fal`, `roboflow`, `api`)
+- `--sam_backend`: Segmentation backend (`yolo_world` [default], `owlvit`, `local`, `fal`, `roboflow`, `api`)
 - `--merge_threshold`: IoU threshold for merging overlapping detections (0 disables)
 - `--optimize_iterations`: Number of LLM refinement passes on SVG template (0 skips)
 - `--reference_image_path`: Optional style reference image for generation
@@ -97,18 +97,22 @@ Code comments and docstrings are primarily in Chinese. The codebase uses Python 
 
 | Agent | 类型 | 职责 |
 |-------|------|------|
-| architect | Plan | Pipeline 架构设计、LLM provider 抽象、SAM backend 选择 |
-| feature-designer | Plan | 将需求转化为实现规格 |
+| architect | general-purpose | Pipeline 架构设计、LLM provider 抽象、segmentation backend 选择（仅设计，不改代码） |
+| feature-designer | general-purpose | 将需求转化为实现规格（仅设计，不改代码） |
 | implementation-engineer | general-purpose | 代码实现 |
 | pipeline-engineer | general-purpose | Pipeline 阶段/backend/provider 集成 |
 | code-reviewer | general-purpose | 代码质量、API key 安全、pipeline 完整性审查 |
 | doc-writer | general-purpose | 文档更新 |
+| test-engineer | general-purpose | 冒烟测试、回归验证、pipeline 集成测试 |
+| frontend-engineer | general-purpose | Web 前端开发（web/ 目录，排除 vendor/svg-edit/） |
 
 ### Workflow（`.claude/workflows/`）
 
-- `feature-workflow.md`: architect → feature-designer → implementation-engineer → code-reviewer + doc-writer (并行)
-- `bugfix-workflow.md`: implementation-engineer → code-reviewer → doc-writer (如需)
-- `pipeline-extension.md`: architect → pipeline-engineer → code-reviewer + doc-writer (并行)
+每个 workflow 均包含 **on_failure 失败处理策略** 和 **worktree 隔离标注**。
+
+- `feature-workflow.md`: architect → feature-designer → implementation-engineer (worktree) [+ frontend-engineer 如涉及前端] → code-reviewer + doc-writer + test-engineer (并行)
+- `bugfix-workflow.md`: implementation-engineer (worktree) → code-reviewer + doc-writer + test-engineer (并行)
+- `pipeline-extension.md`: architect → pipeline-engineer (worktree) → code-reviewer + doc-writer + test-engineer (并行)
 
 ### 写入所有权规则
 

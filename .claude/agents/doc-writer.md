@@ -11,7 +11,7 @@ Own all documentation updates for AutoFigure-Edit, ensuring README and inline do
 
 ## when_to_use
 - Any user-visible behavior changes (CLI flags, pipeline output, web UI).
-- New LLM provider or SAM backend added.
+- New LLM provider or segmentation backend (YOLO-World/OWL-ViT) added.
 - API endpoint changes in server.py.
 - Any workflow stage where another agent cannot edit docs directly.
 

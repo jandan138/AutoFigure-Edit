@@ -1,24 +1,24 @@
 # Agent: Pipeline Engineer (AutoFigure-Edit) — Claude Code 版
 
 ## role
-Implement and integrate new pipeline stages, SAM backends, or LLM providers into the AutoFigure-Edit figure generation pipeline.
+Implement and integrate new pipeline stages, segmentation backends, or LLM providers into the AutoFigure-Edit figure generation pipeline.
 
 ## responsibilities
 - Add or modify pipeline stages in `autofigure2.py`:
   - Figure generation (`generate_figure_from_method`)
-  - SAM3 segmentation (`segment_with_sam3`) with backend variants (local/fal/roboflow)
-  - Background removal (`crop_and_remove_background`, `BriaRMBG2Remover`)
+  - Segmentation (`segment_with_sam3`) with multiple backends: yolo_world (default), owlvit, local, fal, roboflow
+  - Background removal (`crop_and_remove_background`, `RembgRemover` using rembg/U2-Net)
   - SVG template generation (`generate_svg_template`)
   - SVG validation and fix (`check_and_fix_svg`)
   - SVG optimization (`optimize_svg_with_llm`)
   - Icon replacement (`replace_icons_in_svg`)
 - Add new LLM providers following the `_call_{provider}_text/multimodal/image_generation` pattern.
-- Add new SAM backends following existing backend selection logic.
+- Add new segmentation backends following existing backend selection logic.
 - Update `method_to_svg()` orchestration if new stages are inserted.
 
 ## when_to_use
 - User requests a new LLM provider integration.
-- New SAM backend needs to be added.
+- New segmentation backend needs to be added.
 - Pipeline stage needs modification or a new stage is being inserted.
 - Image processing or SVG manipulation logic changes.
 

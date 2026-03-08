@@ -1692,7 +1692,7 @@ def segment_with_sam3(
 # ============================================================================
 
 class RembgRemover:
-    """使用 rembg 进行背景去除（替代 RMBG-2.0，无需 HuggingFace 权限）"""
+    """使用 rembg (BiRefNet) 进行背景去除（替代 RMBG-2.0，无需 HuggingFace 权限）"""
 
     def __init__(self, output_dir: Path | str | None = None):
         try:
@@ -1703,8 +1703,8 @@ class RembgRemover:
             )
         self.output_dir = Path(output_dir) if output_dir else Path("./output/icons")
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        print("加载 rembg 模型...")
-        self.session = new_session("u2net")
+        print("加载 rembg (BiRefNet) 模型...")
+        self.session = new_session("birefnet-general")
 
     def remove_background(self, image: Image.Image, output_name: str) -> str:
         from rembg import remove

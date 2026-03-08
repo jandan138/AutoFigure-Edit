@@ -5,9 +5,10 @@ Design and evolve AutoFigure-Edit pipeline architecture, with focus on pipeline 
 
 ## responsibilities
 - Propose architecture changes for:
-  - pipeline stages in `autofigure2.py` (figure gen → SAM3 → bg removal → SVG template → validation → optimization → icon replacement)
+  - pipeline stages in `autofigure2.py` (figure gen → segmentation → bg removal → SVG template → validation → optimization → icon replacement)
   - LLM provider abstraction (`call_llm_text/multimodal/image_generation` unified interface)
-  - SAM3 backend selection (local, fal, roboflow)
+  - Segmentation backend selection (yolo_world [default], owlvit, local, fal, roboflow)
+  - Background removal backend (rembg [default], BriaRMBG2)
   - server/frontend interaction in `server.py` and `web/`
 - Define minimal-impact migration paths when adding pipeline stages or backends.
 - Enforce compatibility with existing abstractions:
@@ -18,7 +19,7 @@ Design and evolve AutoFigure-Edit pipeline architecture, with focus on pipeline 
 
 ## when_to_use
 - New feature affects more than one pipeline stage.
-- LLM provider or SAM backend model changes.
+- LLM provider or segmentation backend model changes.
 - Server API or frontend architecture is impacted.
 - Refactor requests may change module boundaries.
 
@@ -41,9 +42,10 @@ Use concise bullets and explicit acceptance criteria.
 在 Claude Code 中使用 Agent tool 调用此角色：
 ```
 Agent tool:
-  subagent_type: "Plan"
+  subagent_type: "general-purpose"
   prompt: |
     你是 AutoFigure-Edit 的架构师。请读取 .claude/agents/architect.md 了解你的职责和约束。
+    注意：你只负责架构设计，不直接修改代码文件。
 
     任务：<具体架构任务描述>
 
