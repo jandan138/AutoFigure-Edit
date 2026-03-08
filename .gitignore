@@ -1,7 +1,6 @@
 __pycache__/
 *.pyc
 .venv/
-outputs/
 *.pt
 input/
 paper.txt

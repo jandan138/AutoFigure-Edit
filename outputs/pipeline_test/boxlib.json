@@ -1,0 +1,49 @@
+{
+  "image_size": {
+    "width": 1408,
+    "height": 768
+  },
+  "prompts_used": [
+    "robot",
+    "computer",
+    "file",
+    "folder",
+    "person",
+    "document",
+    "image",
+    "logo",
+    "picture"
+  ],
+  "boxes": [
+    {
+      "id": 0,
+      "label": "<AF>01",
+      "x1": 472,
+      "y1": 0,
+      "x2": 938,
+      "y2": 615,
+      "score": 0.06782449036836624,
+      "prompt": "picture"
+    },
+    {
+      "id": 1,
+      "label": "<AF>02",
+      "x1": 3,
+      "y1": 1,
+      "x2": 470,
+      "y2": 618,
+      "score": 0.04894431307911873,
+      "prompt": "picture"
+    },
+    {
+      "id": 2,
+      "label": "<AF>03",
+      "x1": 936,
+      "y1": 1,
+      "x2": 1403,
+      "y2": 617,
+      "score": 0.05887801572680473,
+      "prompt": "picture"
+    }
+  ]
+}

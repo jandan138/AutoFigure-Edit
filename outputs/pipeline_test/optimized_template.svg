@@ -1,0 +1,309 @@
+<svg viewBox="0 0 1408 768" width="1408" height="768" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#4A86E8" />
+    </marker>
+    <marker id="arrow-black" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="black" />
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#6AA84F" />
+    </marker>
+    <style>
+      text { font-family: Arial, sans-serif; }
+      .title { font-weight: bold; font-size: 18px; text-anchor: middle; }
+      .label { font-size: 14px; text-anchor: middle; }
+      .small-label { font-size: 12px; text-anchor: middle; }
+      .placeholder-rect { fill: #808080; stroke: black; stroke-width: 2; }
+      .placeholder-text { fill: white; font-size: 14px; font-weight: bold; text-anchor: middle; dominant-baseline: middle; }
+      .panel-1 { fill: #DAE8FC; stroke: #6C8EBF; stroke-width: 3; }
+      .panel-2 { fill: #FFF2CC; stroke: #D6B656; stroke-width: 3; }
+      .panel-3 { fill: #D5E8D4; stroke: #82B366; stroke-width: 3; }
+      .footer-text { font-size: 14px; }
+      .caption-title { font-weight: bold; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1408" height="768" fill="white" />
+
+  <!-- STAGE 1 (Left) -->
+  <rect x="10" y="10" width="450" height="600" class="panel-1" />
+  <text x="235" y="40" class="title">Stage 1: Recursive USD Traversal &amp;</text>
+  <text x="235" y="60" class="title">Graph Building (<tspan fill="#4A86E8">Blue</tspan>)</text>
+
+  <!-- Stage 1 Content -->
+  <text x="70" y="110" font-size="14" font-weight="bold">Rover the</text>
+  <text x="70" y="125" font-size="14" font-weight="bold">Explorer</text>
+  <text x="60" y="145" font-size="12">Stack Set</text>
+  <text x="60" y="160" font-size="10">(cycle detection)</text>
+  <text x="60" y="180" font-size="12">Done Map</text>
+  <text x="60" y="195" font-size="10">(deduplication)</text>
+
+  <!-- AF01: Rover -->
+  <g id="AF01">
+    <rect x="100" y="90" width="80" height="80" class="placeholder-rect"/>
+    <text x="140" y="130" class="placeholder-text">&lt;AF&gt;01</text>
+  </g>
+
+  <text x="350" y="130" font-size="14" font-weight="bold">ROOT</text>
+  <text x="350" y="150" font-size="14" font-weight="bold">USD FILE</text>
+  <text x="350" y="170" font-size="12">(MDL)</text>
+
+  <!-- AF02: Root File -->
+  <g id="AF02">
+    <rect x="250" y="90" width="80" height="100" class="placeholder-rect"/>
+    <text x="290" y="140" class="placeholder-text">&lt;AF&gt;02</text>
+  </g>
+
+  <!-- Tree Structure Lines -->
+  <path d="M290,190 L290,220 L150,220 L150,250" stroke="#4A86E8" stroke-width="2" fill="none" marker-end="url(#arrow-blue)"/>
+  <path d="M290,220 L300,220 L300,250" stroke="#4A86E8" stroke-width="2" fill="none" marker-end="url(#arrow-blue)"/>
+  <path d="M290,220 L400,220 L400,250" stroke="#4A86E8" stroke-width="2" fill="none" marker-end="url(#arrow-blue)"/>
+  
+  <!-- Sub-branches -->
+  <path d="M150,290 L120,310" stroke="#4A86E8" stroke-width="2" fill="none" marker-end="url(#arrow-blue)"/>
+  <path d="M150,290 L180,310" stroke="#4A86E8" stroke-width="2" fill="none" marker-end="url(#arrow-blue)"/>
+  <path d="M300,290 L250,310" stroke="#4A86E8" stroke-width="2" fill="none" marker-end="url(#arrow-blue)"/>
+  <path d="M300,290 L350,310" stroke="#4A86E8" stroke-width="2" fill="none" marker-end="url(#arrow-blue)"/>
+
+  <!-- AF03-AF06: Small Icons -->
+  <g id="AF03"> <!-- Sublayer -->
+    <rect x="100" y="310" width="40" height="40" class="placeholder-rect"/>
+    <text x="120" y="330" class="placeholder-text" font-size="10">&lt;AF&gt;03</text>
+  </g>
+  <text x="120" y="365" class="small-label">Sublayer</text>
+
+  <g id="AF04"> <!-- Reference -->
+    <rect x="160" y="310" width="40" height="40" class="placeholder-rect"/>
+    <text x="180" y="330" class="placeholder-text" font-size="10">&lt;AF&gt;04</text>
+  </g>
+  <text x="180" y="365" class="small-label">Reference</text>
+
+  <g id="AF05"> <!-- Payload -->
+    <rect x="230" y="310" width="40" height="40" class="placeholder-rect"/>
+    <text x="250" y="330" class="placeholder-text" font-size="10">&lt;AF&gt;05</text>
+  </g>
+  <text x="250" y="365" class="small-label">Payload</text>
+
+  <g id="AF06"> <!-- Variant -->
+    <rect x="290" y="310" width="40" height="40" class="placeholder-rect"/>
+    <text x="310" y="330" class="placeholder-text" font-size="10">&lt;AF&gt;06</text>
+  </g>
+  <text x="310" y="365" class="small-label">Variant</text>
+  <text x="310" y="380" class="small-label">Selection</text>
+
+  <!-- Thought Bubble -->
+  <ellipse cx="220" cy="420" rx="60" ry="30" fill="white" stroke="black" />
+  <circle cx="180" cy="445" r="5" fill="white" stroke="black" />
+  <circle cx="170" cy="455" r="3" fill="white" stroke="black" />
+  <text x="220" y="410" font-size="10" text-anchor="middle">Composition</text>
+  <text x="220" y="422" font-size="10" text-anchor="middle">Arcs Preserved,</text>
+  <text x="220" y="434" font-size="10" text-anchor="middle">Not Flattened!</text>
+
+  <!-- Blue Flow Arrow -->
+  <path d="M100,180 Q50,250 50,400 L60,450" stroke="#4A86E8" stroke-width="4" fill="none" marker-end="url(#arrow-blue)"/>
+
+  <!-- Bottom Stage 1 -->
+  <!-- AF07: Asset Files -->
+  <g id="AF07">
+    <rect x="30" y="470" width="60" height="70" class="placeholder-rect"/>
+    <text x="60" y="505" class="placeholder-text" font-size="12">&lt;AF&gt;07</text>
+  </g>
+  <text x="60" y="555" class="small-label">Asset Files</text>
+  <text x="60" y="570" class="small-label">(MDL)</text>
+
+  <!-- Arrow -->
+  <line x1="100" y1="505" x2="130" y2="505" stroke="black" stroke-width="2" marker-end="url(#arrow-black)"/>
+
+  <!-- AF08: Builder Bot -->
+  <g id="AF08">
+    <rect x="140" y="470" width="70" height="80" class="placeholder-rect"/>
+    <text x="175" y="510" class="placeholder-text" font-size="12">&lt;AF&gt;08</text>
+  </g>
+  <text x="175" y="565" class="small-label" font-weight="bold">Builder Bot</text>
+
+  <!-- Arrow -->
+  <line x1="220" y1="505" x2="250" y2="505" stroke="black" stroke-width="2" marker-end="url(#arrow-black)"/>
+
+  <!-- AF09: Sibling Files -->
+  <g id="AF09">
+    <rect x="260" y="470" width="60" height="70" class="placeholder-rect"/>
+    <text x="290" y="505" class="placeholder-text" font-size="12">&lt;AF&gt;09</text>
+  </g>
+  <text x="290" y="555" class="small-label">Sibling *_noMDL.usd</text>
+  <text x="290" y="570" class="small-label">Files</text>
+
+  <!-- Big Arrow Stage 1 to 2 -->
+  <polygon points="460,320 480,320 480,300 500,330 480,360 480,340 460,340" fill="#DAE8FC" stroke="#6C8EBF" stroke-width="2"/>
+
+  <!-- STAGE 2 (Middle) -->
+  <rect x="470" y="10" width="468" height="600" class="panel-2" />
+  <text x="704" y="40" class="title">Stage 2: Material Conversion (Per File)</text>
+  <text x="704" y="60" class="title">(<tspan fill="#E69138">Orange</tspan>)</text>
+
+  <!-- Room Perspective -->
+  <line x1="500" y1="100" x2="900" y2="100" stroke="#E69138" stroke-width="1" />
+  <line x1="500" y1="430" x2="900" y2="430" stroke="#E69138" stroke-width="2" />
+  <rect x="500" y="430" width="400" height="150" fill="#555" opacity="0.1" />
+
+  <!-- Content -->
+  <text x="650" y="140" font-size="12" font-weight="bold">Texture Assets</text>
+  
+  <!-- AF10: Texture Assets -->
+  <g id="AF10">
+    <rect x="600" y="150" width="100" height="50" class="placeholder-rect"/>
+    <text x="650" y="175" class="placeholder-text">&lt;AF&gt;10</text>
+  </g>
+  
+  <text x="650" y="220" font-size="10" text-anchor="middle">Four-Channel</text>
+  <text x="650" y="232" font-size="10" text-anchor="middle">Mapping</text>
+  <line x1="630" y1="200" x2="640" y2="210" stroke="black" stroke-width="2" marker-end="url(#arrow-black)"/>
+  <line x1="670" y1="200" x2="660" y2="210" stroke="black" stroke-width="2" marker-end="url(#arrow-black)"/>
+
+  <text x="750" y="200" font-size="12" font-weight="bold">Material</text>
+  <text x="750" y="215" font-size="12" font-weight="bold">Mapper</text>
+  <text x="750" y="230" font-size="12" font-weight="bold">Mimi</text>
+
+  <text x="560" y="270" font-size="12" font-weight="bold">MDL Material</text>
+  <text x="560" y="285" font-size="10">(Complex)</text>
+
+  <!-- AF11: Material Mapper (Robot) -->
+  <g id="AF11">
+    <rect x="700" y="250" width="80" height="100" class="placeholder-rect"/>
+    <text x="740" y="300" class="placeholder-text">&lt;AF&gt;11</text>
+  </g>
+
+  <!-- AF12: MDL Material (Screen) & Machine -->
+  <g id="AF12">
+    <rect x="520" y="300" width="160" height="120" class="placeholder-rect"/>
+    <text x="600" y="360" class="placeholder-text">&lt;AF&gt;12</text>
+  </g>
+
+  <!-- Stack Rights -->
+  <text x="850" y="220" font-size="12" font-weight="bold">UsdPreviewSurface</text>
+  <text x="850" y="235" font-size="10">Network (Minimal)</text>
+  
+  <rect x="800" y="250" width="80" height="25" rx="5" fill="#90EE90" stroke="black"/>
+  <text x="840" y="267" font-size="10" text-anchor="middle">Base Color</text>
+
+  <rect x="800" y="285" width="80" height="25" rx="5" fill="#D3D3D3" stroke="black"/>
+  <text x="840" y="302" font-size="10" text-anchor="middle">Roughness</text>
+
+  <rect x="800" y="320" width="80" height="25" rx="5" fill="#FFCC80" stroke="black"/>
+  <text x="840" y="337" font-size="10" text-anchor="middle">Metallic</text>
+
+  <rect x="800" y="355" width="80" height="25" rx="5" fill="#CE93D8" stroke="black"/>
+  <text x="840" y="372" font-size="10" text-anchor="middle">Normal</text>
+
+  <!-- Pipes -->
+  <path d="M680,320 L800,262" stroke="#E69138" stroke-width="3" fill="none"/>
+  <path d="M680,340 L800,297" stroke="#E69138" stroke-width="3" fill="none"/>
+  <path d="M680,360 L800,332" stroke="#E69138" stroke-width="3" fill="none"/>
+  <path d="M680,380 L800,367" stroke="#E69138" stroke-width="3" fill="none"/>
+
+  <!-- AF13: Trash Bin -->
+  <g id="AF13">
+    <rect x="520" y="450" width="100" height="100" class="placeholder-rect"/>
+    <text x="570" y="500" class="placeholder-text">&lt;AF&gt;13</text>
+  </g>
+
+  <text x="700" y="565" font-size="12" font-weight="bold">Removed MDL Features &amp; Prims</text>
+  <text x="700" y="580" font-size="10">(Subsurface, Clearcoat, Emission, etc.)</text>
+
+  <!-- Big Arrow Stage 2 to 3 -->
+  <polygon points="920,320 940,320 940,300 960,330 940,360 940,340 920,340" fill="#FFF2CC" stroke="#D6B656" stroke-width="2"/>
+
+  <!-- STAGE 3 (Right) -->
+  <rect x="948" y="10" width="450" height="600" class="panel-3" />
+  <text x="1173" y="40" class="title">Stage 3: Asset Path Rewriting (<tspan fill="#6AA84F">Green</tspan>)</text>
+
+  <text x="1150" y="110" font-size="12" font-weight="bold">Pathfinder</text>
+  <text x="1150" y="125" font-size="12" font-weight="bold">Pete</text>
+
+  <!-- AF14: Pete -->
+  <g id="AF14">
+    <rect x="1050" y="90" width="90" height="90" class="placeholder-rect"/>
+    <text x="1095" y="135" class="placeholder-text">&lt;AF&gt;14</text>
+  </g>
+
+  <!-- Graph -->
+  <!-- Nodes (Files) - Drawing simple rects as they are structural components of the graph -->
+  <g transform="translate(980, 190)">
+    <!-- Col 1 -->
+    <rect x="0" y="0" width="30" height="40" fill="white" stroke="black"/>
+    <rect x="0" y="100" width="30" height="40" fill="white" stroke="black"/>
+    <rect x="0" y="200" width="30" height="40" fill="white" stroke="black"/>
+    <!-- Col 2 -->
+    <rect x="70" y="100" width="30" height="40" fill="white" stroke="black"/>
+    <rect x="70" y="180" width="30" height="40" fill="white" stroke="black"/>
+    <rect x="70" y="260" width="30" height="40" fill="white" stroke="black"/>
+    <!-- Col 3 -->
+    <rect x="140" y="20" width="30" height="40" fill="white" stroke="black"/>
+    <rect x="140" y="100" width="30" height="40" fill="white" stroke="black"/>
+    <rect x="140" y="200" width="30" height="40" fill="white" stroke="black"/>
+
+    <!-- Connections (Simplified) -->
+    <!-- Red Dashed (Original) -->
+    <line x1="15" y1="40" x2="15" y2="100" stroke="#B22222" stroke-width="1" stroke-dasharray="4,2"/>
+    <line x1="15" y1="140" x2="70" y2="120" stroke="#B22222" stroke-width="1" stroke-dasharray="4,2"/>
+    <line x1="85" y1="140" x2="140" y2="40" stroke="#B22222" stroke-width="1" stroke-dasharray="4,2"/>
+    
+    <!-- Green Solid (New) -->
+    <line x1="30" y1="120" x2="70" y2="120" stroke="#6AA84F" stroke-width="2"/>
+    <line x1="30" y1="220" x2="70" y2="200" stroke="#6AA84F" stroke-width="2"/>
+    <line x1="100" y1="120" x2="140" y2="120" stroke="#6AA84F" stroke-width="2"/>
+    <line x1="100" y1="200" x2="140" y2="220" stroke="#6AA84F" stroke-width="2"/>
+    <line x1="170" y1="120" x2="200" y2="120" stroke="#6AA84F" stroke-width="2" marker-end="url(#arrow-green)"/>
+  </g>
+
+  <!-- Legend -->
+  <line x1="970" y1="560" x2="1000" y2="560" stroke="#B22222" stroke-width="2" stroke-dasharray="4,2"/>
+  <text x="1010" y="565" font-size="12">Original Path</text>
+  <line x1="970" y1="580" x2="1000" y2="580" stroke="#6AA84F" stroke-width="2"/>
+  <text x="1010" y="585" font-size="12">New *_noMDL Path</text>
+
+  <text x="1280" y="200" font-size="12" font-weight="bold" text-anchor="middle">CONVERTED</text>
+  <text x="1280" y="215" font-size="12" font-weight="bold" text-anchor="middle">ROOT FILE</text>
+  <text x="1280" y="230" font-size="10" text-anchor="middle">(*_noMDL.usd)</text>
+
+  <!-- AF15: Converted Root File -->
+  <g id="AF15">
+    <rect x="1230" y="250" width="100" height="120" class="placeholder-rect"/>
+    <text x="1280" y="310" class="placeholder-text">&lt;AF&gt;15</text>
+  </g>
+
+  <text x="1280" y="390" font-size="12" text-anchor="middle">Self-Consistent</text>
+  <text x="1280" y="405" font-size="12" text-anchor="middle">UsdPreviewSurface</text>
+  <text x="1280" y="420" font-size="12" text-anchor="middle">Scene</text>
+
+  <!-- AF16: Bottom Robots -->
+  <g id="AF16">
+    <rect x="1180" y="480" width="180" height="100" class="placeholder-rect"/>
+    <text x="1270" y="530" class="placeholder-text">&lt;AF&gt;16</text>
+  </g>
+
+  <!-- FOOTER -->
+  <g transform="translate(0, 620)">
+    <!-- Stage Labels Repeated -->
+    <text x="235" y="20" font-size="14" text-anchor="middle">Stage 1: Recursive USD Traversal</text>
+    <text x="235" y="40" font-size="14" text-anchor="middle">&amp; Graph Building (<tspan fill="#4A86E8">Blue</tspan>)</text>
+
+    <text x="704" y="20" font-size="14" text-anchor="middle">Stage 2: Material Conversion</text>
+    <text x="704" y="40" font-size="14" text-anchor="middle">(Per File) (<tspan fill="#E69138">Orange</tspan>)</text>
+
+    <text x="1173" y="20" font-size="14" text-anchor="middle">Stage 3: Asset Path Rewriting</text>
+    <text x="1173" y="40" font-size="14" text-anchor="middle">(<tspan fill="#6AA84F">Green</tspan>)</text>
+
+    <!-- Main Caption -->
+    <text x="10" y="80" class="footer-text">
+      <tspan class="caption-title">Figure 2.</tspan> The three-stage conversion pipeline transforms MDL-based USD scenes into UsdPreviewSurface while maintaining compositional integrity. Stage 1
+    </text>
+    <text x="10" y="100" class="footer-text">
+      recursively builds a dependency graph and creates sibling files with preserved arcs. Stage 2 converts MDL materials to minimal four-channel UsdPreviewSurface networks,
+    </text>
+    <text x="10" y="120" class="footer-text">
+      discarding unsupported features. Stage 3 rewrites all internal asset paths to point to the new converted variants, resulting in a fully self-consistent scene.
+    </text>
+  </g>
+</svg>
