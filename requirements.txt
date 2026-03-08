@@ -19,6 +19,8 @@ torch>=2.1
 torchvision>=0.16
 transformers>=4.39,<5.0
 kornia>=0.7,<1.0
+ultralytics>=8.1
+rembg>=2.0
 
 # SVG validation / rendering helpers (recommended)
 lxml>=4.9

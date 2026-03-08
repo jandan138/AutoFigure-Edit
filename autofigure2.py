@@ -151,7 +151,7 @@ def call_llm_text(
     if provider == "bianxie":
         return _call_bianxie_text(prompt, api_key, model, base_url, max_tokens, temperature)
     if provider == "gemini":
-        return _call_gemini_text(prompt, api_key, model, max_tokens, temperature)
+        return _call_gemini_text(prompt, api_key, model, max_tokens, temperature, base_url=base_url)
     return _call_openrouter_text(prompt, api_key, model, base_url, max_tokens, temperature)
 
 
@@ -182,7 +182,7 @@ def call_llm_multimodal(
     if provider == "bianxie":
         return _call_bianxie_multimodal(contents, api_key, model, base_url, max_tokens, temperature)
     if provider == "gemini":
-        return _call_gemini_multimodal(contents, api_key, model, max_tokens, temperature)
+        return _call_gemini_multimodal(contents, api_key, model, max_tokens, temperature, base_url=base_url)
     return _call_openrouter_multimodal(contents, api_key, model, base_url, max_tokens, temperature)
 
 
@@ -216,6 +216,7 @@ def call_llm_image_generation(
             model=model,
             reference_image=reference_image,
             image_size=GEMINI_DEFAULT_IMAGE_SIZE,
+            base_url=base_url,
         )
     return _call_openrouter_image_generation(prompt, api_key, model, base_url, reference_image)
 
@@ -536,14 +537,20 @@ def _call_openrouter_image_generation(
 # Gemini Provider 实现 (Google 官方 SDK)
 # ============================================================================
 
-def _get_gemini_client(api_key: str):
+def _get_gemini_client(api_key: str, base_url: Optional[str] = None):
     """获取 Gemini 客户端（延迟导入，避免非 Gemini 场景强依赖）"""
     try:
         from google import genai
+        from google.genai import types as genai_types
     except ImportError as e:
         raise ImportError(
             "未安装 google-genai，请执行: pip install google-genai"
         ) from e
+    if base_url:
+        return genai.Client(
+            api_key=api_key,
+            http_options=genai_types.HttpOptions(base_url=base_url),
+        )
     return genai.Client(api_key=api_key)
 
 
@@ -624,10 +631,11 @@ def _call_gemini_text(
     model: str,
     max_tokens: int = 16000,
     temperature: float = 0.7,
+    base_url: Optional[str] = None,
 ) -> Optional[str]:
     """调用 Gemini 文本接口"""
     try:
-        client = _get_gemini_client(api_key)
+        client = _get_gemini_client(api_key, base_url=base_url)
         response = client.models.generate_content(
             model=model,
             contents=prompt,
@@ -645,10 +653,11 @@ def _call_gemini_multimodal(
     model: str,
     max_tokens: int = 16000,
     temperature: float = 0.7,
+    base_url: Optional[str] = None,
 ) -> Optional[str]:
     """调用 Gemini 多模态接口"""
     try:
-        client = _get_gemini_client(api_key)
+        client = _get_gemini_client(api_key, base_url=base_url)
         response = client.models.generate_content(
             model=model,
             contents=contents,
@@ -666,12 +675,13 @@ def _call_gemini_image_generation(
     model: str,
     reference_image: Optional[Image.Image] = None,
     image_size: str = GEMINI_DEFAULT_IMAGE_SIZE,
+    base_url: Optional[str] = None,
 ) -> Optional[Image.Image]:
     """调用 Gemini 生图接口，默认 image_size=4K"""
     try:
         from google.genai import types
 
-        client = _get_gemini_client(api_key)
+        client = _get_gemini_client(api_key, base_url=base_url)
         config = types.GenerateContentConfig(
             image_config=types.ImageConfig(image_size=image_size),
         )
@@ -687,10 +697,68 @@ def _call_gemini_image_generation(
             contents=contents,
             config=config,
         )
-        return _extract_gemini_image(response)
+        img = _extract_gemini_image(response)
+        if img is not None:
+            return img
+        print("[Gemini] 原生图像生成未返回图片，尝试 SVG fallback...")
+        raise RuntimeError("No image in response, try SVG fallback")
     except Exception as e:
         print(f"[Gemini] 图像生成 API 调用失败: {e}")
-        raise
+        print("[Gemini] 尝试 SVG fallback：用文本模型生成 SVG 再转 PNG...")
+        return _gemini_image_via_svg_fallback(
+            prompt=prompt,
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+        )
+
+
+def _gemini_image_via_svg_fallback(
+    prompt: str,
+    api_key: str,
+    model: str,
+    base_url: Optional[str] = None,
+) -> Optional[Image.Image]:
+    """当原生图像生成不可用时，让模型生成 SVG 代码再转为 PNG"""
+    import cairosvg
+
+    svg_prompt = f"""You are a scientific figure designer. Based on the following request, generate a complete, valid SVG image.
+
+IMPORTANT RULES:
+- Output ONLY the SVG code, nothing else
+- Start with <svg and end with </svg>
+- Use viewBox="0 0 1200 800" for landscape layout
+- Use clean academic style: labeled boxes, arrows, clear typography
+- Use professional colors (blues, grays, greens)
+- Include proper text labels for all components
+- Make sure all text is readable (font-size >= 14)
+
+Request: {prompt}"""
+
+    svg_text = _call_gemini_text(
+        prompt=svg_prompt,
+        api_key=api_key,
+        model=model,
+        max_tokens=16000,
+        temperature=0.7,
+        base_url=base_url,
+    )
+    if not svg_text:
+        return None
+
+    # 提取 SVG 代码
+    svg_match = re.search(r'<svg[\s\S]*?</svg>', svg_text)
+    if not svg_match:
+        print("[Gemini SVG Fallback] 未找到有效 SVG 代码")
+        return None
+
+    svg_code = svg_match.group(0)
+    try:
+        png_data = cairosvg.svg2png(bytestring=svg_code.encode('utf-8'), output_width=1200, output_height=800)
+        return Image.open(io.BytesIO(png_data))
+    except Exception as e2:
+        print(f"[Gemini SVG Fallback] SVG 转 PNG 失败: {e2}")
+        return None
 
 
 # ============================================================================
@@ -1214,13 +1282,156 @@ def _call_sam3_roboflow_api(
     return result
 
 
+def _segment_with_owlvit(
+    image: Image.Image,
+    prompt_list: list[str],
+    min_score: float,
+) -> list[dict]:
+    """
+    使用 OWL-ViT 进行零样本目标检测
+
+    Args:
+        image: PIL Image 对象
+        prompt_list: 文本 prompt 列表（如 ["icon", "robot"]）
+        min_score: 最低置信度阈值
+
+    Returns:
+        检测到的 boxes 列表，每个 box 为 dict:
+        {"x1": int, "y1": int, "x2": int, "y2": int, "score": float, "prompt": str}
+    """
+    try:
+        from transformers import OwlViTProcessor, OwlViTForObjectDetection
+        import torch
+    except ImportError:
+        raise ImportError(
+            "OWL-ViT backend requires transformers. Install: pip install transformers torch"
+        )
+
+    print(f"  使用 OWL-ViT 进行零样本检测...")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"  设备: {device}")
+
+    # 加载模型（首次运行会自动下载 ~500MB）
+    print("  加载 OWL-ViT 模型...")
+    processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+    model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32").to(device)
+
+    all_boxes = []
+
+    for prompt in prompt_list:
+        print(f"  检测 prompt: '{prompt}'")
+
+        # 准备输入
+        inputs = processor(text=[prompt], images=image, return_tensors="pt").to(device)
+
+        # 推理
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # 后处理（将 boxes 转换为绝对坐标）
+        target_sizes = torch.tensor([image.size[::-1]]).to(device)  # (height, width)
+        if hasattr(processor, 'post_process_grounded_object_detection'):
+            results = processor.post_process_grounded_object_detection(
+                outputs=outputs,
+                target_sizes=target_sizes,
+                threshold=min_score,
+                text_labels=[[prompt]],
+            )[0]
+        else:
+            results = processor.post_process_object_detection(
+                outputs=outputs,
+                target_sizes=target_sizes,
+                threshold=min_score,
+            )[0]
+
+        # 提取 boxes 和 scores
+        boxes = results["boxes"].cpu().numpy()
+        scores = results["scores"].cpu().numpy()
+
+        print(f"    检测到 {len(boxes)} 个候选区域")
+
+        for box, score in zip(boxes, scores):
+            x1, y1, x2, y2 = map(int, box)
+            all_boxes.append({
+                "x1": x1,
+                "y1": y1,
+                "x2": x2,
+                "y2": y2,
+                "score": float(score),
+                "prompt": prompt
+            })
+
+    # 清理 GPU 缓存
+    del model, processor
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    print(f"  OWL-ViT 检测完成，共 {len(all_boxes)} 个候选区域")
+    return all_boxes
+
+
+def _segment_with_yolo_world(
+    image: Image.Image,
+    prompt_list: list[str],
+    min_score: float,
+) -> list[dict]:
+    """
+    使用 YOLO-World 进行零样本目标检测
+
+    Args:
+        image: PIL Image 对象
+        prompt_list: 文本 prompt 列表（如 ["icon", "robot"]）
+        min_score: 最低置信度阈值
+
+    Returns:
+        检测到的 boxes 列表，每个 box 为 dict:
+        {"x1": int, "y1": int, "x2": int, "y2": int, "score": float, "prompt": str}
+    """
+    try:
+        from ultralytics import YOLOWorld
+        import torch
+    except ImportError:
+        raise ImportError(
+            "YOLO-World backend requires ultralytics. Install: pip install ultralytics"
+        )
+
+    print(f"  使用 YOLO-World 进行零样本检测...")
+
+    # 加载模型（首次运行自动下载 ~200MB）
+    print("  加载 YOLO-World 模型...")
+    model = YOLOWorld("yolov8s-worldv2.pt")
+    model.set_classes(prompt_list)
+
+    # 推理
+    results = model.predict(image, conf=min_score, verbose=False)
+
+    all_boxes = []
+    for result in results:
+        for box in result.boxes:
+            x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
+            conf = float(box.conf[0].item())
+            cls_idx = int(box.cls[0].item())
+
+            all_boxes.append({
+                "x1": x1,
+                "y1": y1,
+                "x2": x2,
+                "y2": y2,
+                "score": conf,
+                "prompt": prompt_list[cls_idx] if cls_idx < len(prompt_list) else "unknown"
+            })
+
+    print(f"  YOLO-World 检测完成，共 {len(all_boxes)} 个候选区域")
+    return all_boxes
+
+
 def segment_with_sam3(
     image_path: str,
     output_dir: str,
     text_prompts: str = "icon",
     min_score: float = 0.5,
     merge_threshold: float = 0.9,
-    sam_backend: Literal["local", "fal", "roboflow", "api"] = "local",
+    sam_backend: Literal["local", "fal", "roboflow", "api", "owlvit", "yolo_world"] = "yolo_world",
     sam_api_key: Optional[str] = None,
     sam_max_masks: int = 32,
 ) -> tuple[str, str, list]:
@@ -1265,7 +1476,13 @@ def segment_with_sam3(
     if backend == "api":
         backend = "fal"
 
-    if backend == "local":
+    if backend == "yolo_world":
+        all_detected_boxes = _segment_with_yolo_world(image, prompt_list, min_score)
+        total_detected = len(all_detected_boxes)
+    elif backend == "owlvit":
+        all_detected_boxes = _segment_with_owlvit(image, prompt_list, min_score)
+        total_detected = len(all_detected_boxes)
+    elif backend == "local":
         from sam3.model_builder import build_sam3_image_model
         from sam3.model.sam3_image_processor import Sam3Processor
         import sam3
@@ -1474,6 +1691,30 @@ def segment_with_sam3(
 # 步骤三：裁切 + RMBG2 去背景
 # ============================================================================
 
+class RembgRemover:
+    """使用 rembg 进行背景去除（替代 RMBG-2.0，无需 HuggingFace 权限）"""
+
+    def __init__(self, output_dir: Path | str | None = None):
+        try:
+            from rembg import new_session
+        except ImportError:
+            raise ImportError(
+                "rembg backend requires rembg. Install: pip install rembg"
+            )
+        self.output_dir = Path(output_dir) if output_dir else Path("./output/icons")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        print("加载 rembg 模型...")
+        self.session = new_session("u2net")
+
+    def remove_background(self, image: Image.Image, output_name: str) -> str:
+        from rembg import remove
+        image_rgb = image.convert("RGB")
+        out = remove(image_rgb, session=self.session)
+        out_path = self.output_dir / f"{output_name}_nobg.png"
+        out.save(out_path)
+        return str(out_path)
+
+
 class BriaRMBG2Remover:
     """使用 BRIA-RMBG 2.0 模型进行高质量背景抠图"""
 
@@ -1551,7 +1792,13 @@ def crop_and_remove_background(
         print("警告: 没有检测到有效的 box")
         return []
 
-    remover = BriaRMBG2Remover(model_path=rmbg_model_path, output_dir=icons_dir)
+    remover = None
+    # 优先使用 rembg（无需 HuggingFace 权限），回退到 RMBG-2.0
+    try:
+        remover = RembgRemover(output_dir=icons_dir)
+    except ImportError:
+        print("  rembg 未安装，尝试使用 RMBG-2.0...")
+        remover = BriaRMBG2Remover(model_path=rmbg_model_path, output_dir=icons_dir)
 
     icon_infos = []
     for box_info in boxes:
@@ -2397,7 +2644,7 @@ def method_to_svg(
     svg_gen_model: str = None,
     sam_prompts: str = "icon",
     min_score: float = 0.5,
-    sam_backend: Literal["local", "fal", "roboflow", "api"] = "local",
+    sam_backend: Literal["local", "fal", "roboflow", "api", "owlvit", "yolo_world"] = "yolo_world",
     sam_api_key: Optional[str] = None,
     sam_max_masks: int = 32,
     rmbg_model_path: Optional[str] = None,
@@ -2419,7 +2666,7 @@ def method_to_svg(
         svg_gen_model: SVG 生成模型
         sam_prompts: SAM3 文本提示，支持逗号分隔的多个prompt（如 "icon,diagram,arrow"）
         min_score: SAM3 最低置信度
-        sam_backend: SAM3 后端（local/fal/roboflow/api）
+        sam_backend: SAM3 后端（local/fal/roboflow/api/owlvit/yolo_world）
         sam_api_key: SAM3 API Key（api 模式使用）
         sam_max_masks: SAM3 API 最大 masks 数（api 模式使用）
         rmbg_model_path: RMBG 模型路径
@@ -2705,9 +2952,9 @@ if __name__ == "__main__":
     parser.add_argument("--min_score", type=float, default=0.0, help="SAM3 最低置信度阈值（默认: 0.0）")
     parser.add_argument(
         "--sam_backend",
-        choices=["local", "fal", "roboflow", "api"],
-        default="local",
-        help="SAM3 后端：local(本地部署)/fal(fal.ai)/roboflow(Roboflow)/api(旧别名=fal)",
+        choices=["local", "fal", "roboflow", "api", "owlvit", "yolo_world"],
+        default="yolo_world",
+        help="分割后端：yolo_world(YOLO-World零样本,推荐)/owlvit(OWL-ViT零样本)/local(SAM3本地,需权重)/fal(fal.ai API)/roboflow(Roboflow API)/api(旧别名=fal)",
     )
     parser.add_argument("--sam_api_key", default=None, help="SAM3 API Key（默认使用 FAL_KEY）")
     parser.add_argument(

@@ -37,7 +37,7 @@
 | 特性 | 描述 |
 | :--- | :--- |
 | 📝 **文本转插图** | 直接从方法文本生成插图草稿。 |
-| 🧠 **SAM3 图标检测** | 通过多提示词检测图标区域并合并重叠部分。 |
+| 🧠 **图标检测** | 使用 OWL-ViT（默认）或 SAM3 通过多提示词检测图标区域并合并重叠部分。 |
 | 🎯 **带标签占位符** | 插入一致的 AF 风格占位符，实现可靠的 SVG 映射。 |
 | 🧩 **SVG 生成** | 生成与插图对齐的可编辑 SVG 模板。 |
 | 🖥️ **嵌入式编辑器** | 使用内置的 svg-edit 在浏览器中直接编辑 SVG。 |
@@ -81,9 +81,9 @@ AutoFigure-edit 的处理流程通过四个阶段将原始生成的位图转化�
 <br>
 
 1.  **生成 (`figure.png`):** LLM 根据方法文本生成初始的光栅化草图。
-2.  **分割 (`sam.png`):** 集成 SAM3 检测并分割出独立的图标与文本区域。
+2.  **分割 (`sam.png`):** 使用 OWL-ViT（默认）或 SAM3 检测并分割出独立的图标与文本区域。
 3.  **模板 (`template.svg`):** 系统构建包含占位符的 SVG 结构骨架（线框图）。
-4.  **合成 (`final.svg`):** 将高质量的抠图图标和矢量化文本注入模板，完成组装。
+4.  **合成 (`final.svg`):** 将高质量的抠图图标和矢量化文本注入模板,完成组装。
 
 <details>
 <summary><strong>点击查看技术流程详解</strong></summary>
@@ -93,7 +93,7 @@ AutoFigure-edit 的处理流程通过四个阶段将原始生成的位图转化�
   <img src="img/edit_method.png" width="100%" alt="AutoFigure-edit 技术流程"/>
 </div>
 
-AutoFigure2 的流程始于论文的方法文本，首先调用 **文本生成图像 LLM (Text-to-Image LLM)** 渲染出期刊风格的示意图，保存为 `figure.png`。接着，系统使用一个或多个文本提示词（如 "icon, diagram, arrow"）对该图像运行 **SAM3 分割**，通过 IoU 阈值合并重叠的检测结果，并在原图上绘制灰底黑边的带标签框；这一步生成了 `samed.png`（带标签的掩码层）和一个包含坐标、置信度和提示词来源的结构化文件 `boxlib.json`。
+AutoFigure2 的流程始于论文的方法文本，首先调用 **文本生成图像 LLM (Text-to-Image LLM)** 渲染出期刊风格的示意图，保存为 `figure.png`。接着，系统使用一个或多个文本提示词（如 "icon, diagram, arrow"）对该图像运行 **图标分割**（默认使用 OWL-ViT，也可选 SAM3），通过 IoU 阈值合并重叠的检测结果，并在原图上绘制灰底黑边的带标签框；这一步生成了 `samed.png`（带标签的掩码层）和一个包含坐标、置信度和提示词来源的结构化文件 `boxlib.json`。
 
 随后，每个方框区域从原图中裁剪出来，并经过 **RMBG-2.0** 进行背景去除，生成位于 `icons/*.png` 和 `*_nobg.png` 的透明图标素材。系统将 `figure.png`、`samed.png` 和 `boxlib.json` 作为多模态输入，由 LLM 生成一个**占位符风格的 SVG** (`template.svg`)，其方框与标记区域相匹配。
 
@@ -109,16 +109,16 @@ AutoFigure2 的流程始于论文的方法文本，首先调用 **文本生成�
 ### 选项 1: 命令行 (CLI)
 
 ```bash
-# 1) 安装依赖
+# 安装依赖
 pip install -r requirements.txt
 
-# 2) 单独安装 SAM3 (本项目未包含)
+# (可选) 安装 SAM3 — 仅在使用 --sam_backend local 时需要
 git clone https://github.com/facebookresearch/sam3.git
 cd sam3
 pip install -e .
 ```
 
-**运行:**
+**运行（默认使用 OWL-ViT 后端，无需额外安装）:**
 
 ```bash
 python autofigure2.py \
@@ -149,7 +149,7 @@ AutoFigure-edit 提供了一个可视化的 Web 界面，旨在实现无缝的�
 *   **供应商 (Provider):** 选择 LLM 供应商（OpenRouter、Bianxie 或 Gemini）。
 *   **优化 (Optimize):** 设置 SVG 模板的优化迭代次数（日常使用建议设为 `0`）。
 *   **参考图片 (Reference Image):** 上传目标图片以启用风格迁移功能。
-*   **SAM3 后端:** 选择本地 SAM3 或 fal.ai API（API Key 可选）。
+*   **分割后端:** 选择 OWL-ViT（默认，无需安装）、本地 SAM3 或 API 后端（fal.ai/Roboflow）。
 
 ### 2. 画布与编辑器
 <img src="img/demo_canvas.png" width="100%" alt="画布页面" style="border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px;"/>
@@ -160,18 +160,22 @@ AutoFigure-edit 提供了一个可视化的 Web 界面，旨在实现无缝的�
 
 ---
 
-## 🧩 SAM3 安装说明
+## 🧩 分割后端选项
 
-AutoFigure-edit 依赖 SAM3，但本项目**未**直接包含它。请遵循官方 SAM3 安装指南和先决条件。上游仓库目前针对 GPU 构建要求 Python 3.12+、PyTorch 2.7+ 和 CUDA 12.6。
+AutoFigure-edit 默认使用 **OWL-ViT**（Google 的零样本目标检测模型）作为分割后端。该模型在首次运行时会自动从 HuggingFace 下载 — 无需手动安装。
+
+### 备选方案：SAM3（可选）
+
+如果您更喜欢 SAM3，可以单独安装（本项目未包含）。上游仓库目前针对 GPU 构建要求 Python 3.12+、PyTorch 2.7+ 和 CUDA 12.6。
 
 SAM3 权重文件托管在 Hugging Face 上，下载前可能需要申请访问权限并进行认证（例如 `huggingface-cli login`）。
 
 - SAM3 仓库: https://github.com/facebookresearch/sam3
 - SAM3 Hugging Face: https://huggingface.co/facebook/sam3
 
-### SAM3 API 模式（无需本地安装）
+### API 后端（无需本地安装）
 
-如果您不想在本地安装 SAM3，可以使用 API 后端（Web Demo 也支持）。**我们推荐使用 [Roboflow](https://roboflow.com/)，因为它可以免费使用。**
+如果您不想在本地安装模型，可以使用 API 后端（Web Demo 也支持）。**我们推荐使用 [Roboflow](https://roboflow.com/)，因为它可以免费使用。**
 
 **方案 A: fal.ai**
 
@@ -216,7 +220,7 @@ python autofigure2.py \
 - `--provider` (openrouter | bianxie | gemini)
 - `--image_model`, `--svg_model`
 - `--sam_prompt` (逗号分隔的提示词)
-- `--sam_backend` (local | fal | roboflow | api)
+- `--sam_backend` (owlvit [默认] | local | fal | roboflow | api)
 - `--sam_api_key` (API Key，默认读取 `FAL_KEY` 或 `ROBOFLOW_API_KEY`)
 - `--sam_max_masks` (fal.ai 最大 masks，默认 32)
 - `--merge_threshold` (0 禁用合并)

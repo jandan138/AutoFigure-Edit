@@ -40,7 +40,7 @@
 | Feature | Description |
 | :--- | :--- |
 | 📝 **Text-to-Figure** | Generate a draft figure directly from method text. |
-| 🧠 **SAM3 Icon Detection** | Detect icon regions from multiple prompts and merge overlaps. |
+| 🧠 **Icon Detection** | Detect icon regions using OWL-ViT (default) or SAM3 from multiple prompts and merge overlaps. |
 | 🎯 **Labeled Placeholders** | Insert consistent AF-style placeholders for reliable SVG mapping. |
 | 🧩 **SVG Generation** | Produce an editable SVG template aligned to the figure. |
 | 🖥️ **Embedded Editor** | Edit the SVG in-browser using the bundled svg-edit. |
@@ -84,7 +84,7 @@ The AutoFigure-edit pipeline transforms a raw generation into an editable SVG in
 <br>
 
 1.  **Generation (`figure.png`):** The LLM generates a raster draft based on the method text.
-2.  **Segmentation (`sam.png`):** SAM3 detects and segments distinct icons and text regions.
+2.  **Segmentation (`sam.png`):** OWL-ViT (default) or SAM3 detects and segments distinct icons and text regions.
 3.  **Templating (`template.svg`):** The system constructs a structural SVG wireframe using placeholders.
 4.  **Assembly (`final.svg`):** High-quality cropped icons and vectorized text are injected into the template.
 
@@ -96,7 +96,7 @@ The AutoFigure-edit pipeline transforms a raw generation into an editable SVG in
   <img src="img/edit_method.png" width="100%" alt="AutoFigure-edit Technical Pipeline"/>
 </div>
 
-AutoFigure2’s pipeline starts from the paper’s method text and first calls a **text‑to‑image LLM** to render a journal‑style schematic, saved as `figure.png`. The system then runs **SAM3 segmentation** on that image using one or more text prompts (e.g., “icon, diagram, arrow”), merges overlapping detections by an IoU‑like threshold, and draws gray‑filled, black‑outlined labeled boxes on the original; this produces both `samed.png` (the labeled mask overlay) and a structured `boxlib.json` with coordinates, scores, and prompt sources.
+AutoFigure2’s pipeline starts from the paper’s method text and first calls a **text‑to‑image LLM** to render a journal‑style schematic, saved as `figure.png`. The system then runs **icon segmentation** (OWL-ViT by default, or SAM3) on that image using one or more text prompts (e.g., “icon, diagram, arrow”), merges overlapping detections by an IoU‑like threshold, and draws gray‑filled, black‑outlined labeled boxes on the original; this produces both `samed.png` (the labeled mask overlay) and a structured `boxlib.json` with coordinates, scores, and prompt sources.
 
 Next, each box is cropped from the original figure and passed through **RMBG‑2.0** for background removal, yielding transparent icon assets under `icons/*.png` and `*_nobg.png`. With `figure.png`, `samed.png`, and `boxlib.json` as multimodal inputs, the LLM generates a **placeholder‑style SVG** (`template.svg`) whose boxes match the labeled regions.
 
@@ -114,16 +114,16 @@ Optionally, the SVG is iteratively refined by an **LLM optimizer** to better ali
 ### Option 1: CLI
 
 ```bash
-# 1) Install dependencies
+# Install dependencies
 pip install -r requirements.txt
 
-# 2) Install SAM3 separately (not vendored in this repo)
+# (Optional) Install SAM3 — only needed if using --sam_backend local
 git clone https://github.com/facebookresearch/sam3.git
 cd sam3
 pip install -e .
 ```
 
-**Run:**
+**Run (uses OWL-ViT backend by default, no extra install needed):**
 
 ```bash
 python autofigure2.py \
@@ -154,7 +154,7 @@ On the start page, paste your paper's method text on the left. On the right, con
 *   **Provider:** Select your LLM provider (OpenRouter, Bianxie, or Gemini).
 *   **Optimize:** Set SVG template refinement iterations (recommend `0` for standard use).
 *   **Reference Image:** Upload a target image to enable style transfer.
-*   **SAM3 Backend:** Choose local SAM3 or the fal.ai API (API key optional).
+*   **Segmentation Backend:** Choose OWL-ViT (default, no install), local SAM3, or API backends (fal.ai/Roboflow).
 
 ### 2. Canvas & Editor
 <img src="img/demo_canvas.png" width="100%" alt="Canvas Page" style="border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px;"/>
@@ -165,21 +165,22 @@ The generation result loads directly into an integrated [SVG-Edit](https://githu
 
 ---
 
-## 🧩 SAM3 Installation Notes
+## 🧩 Segmentation Backend Options
 
-AutoFigure-edit depends on SAM3 but does **not** vendor it. Please follow the
-official SAM3 installation guide and prerequisites. The upstream repo currently
-targets Python 3.12+, PyTorch 2.7+, and CUDA 12.6 for GPU builds.
+AutoFigure-edit uses **OWL-ViT** (Google's zero-shot object detection model) as the default segmentation backend. The model automatically downloads from HuggingFace on first run — no manual installation required.
 
-SAM3 checkpoints are hosted on Hugging Face and may require you to request
-access and authenticate (e.g., `huggingface-cli login`) before download.
+### Alternative: SAM3 (Optional)
+
+If you prefer SAM3, you can install it separately (not vendored in this repo). The upstream repo currently targets Python 3.12+, PyTorch 2.7+, and CUDA 12.6 for GPU builds.
+
+SAM3 checkpoints are hosted on Hugging Face and may require you to request access and authenticate (e.g., `huggingface-cli login`) before download.
 
 - SAM3 repo: https://github.com/facebookresearch/sam3
 - SAM3 Hugging Face: https://huggingface.co/facebook/sam3
 
-### SAM3 API Mode (No Local Install)
+### API Backends (No Local Install)
 
-If you prefer not to install SAM3 locally, you can use an API backend (also supported in the Web demo). **We recommend using [Roboflow](https://roboflow.com/) as it is free to use.**
+If you prefer not to install models locally, you can use API backends (also supported in the Web demo). **We recommend using [Roboflow](https://roboflow.com/) as it is free to use.**
 
 **Option A: fal.ai**
 
@@ -224,7 +225,7 @@ Common CLI flags:
 - `--provider` (openrouter | bianxie | gemini)
 - `--image_model`, `--svg_model`
 - `--sam_prompt` (comma-separated prompts)
-- `--sam_backend` (local | fal | roboflow | api)
+- `--sam_backend` (owlvit [default] | local | fal | roboflow | api)
 - `--sam_api_key` (API key override; falls back to `FAL_KEY` or `ROBOFLOW_API_KEY`)
 - `--sam_max_masks` (fal.ai max masks, default 32)
 - `--merge_threshold` (0 disables merging)
