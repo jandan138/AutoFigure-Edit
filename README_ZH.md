@@ -37,7 +37,7 @@
 | 特性 | 描述 |
 | :--- | :--- |
 | 📝 **文本转插图** | 直接从方法文本生成插图草稿。 |
-| 🧠 **图标检测** | 使用 OWL-ViT（默认）或 SAM3 通过多提示词检测图标区域并合并重叠部分。 |
+| 🧠 **图标检测** | 使用 YOLO-World（默认）或 OWL-ViT/SAM3 通过多提示词检测图标区域并合并重叠部分。支持通过 `--auto_prompts` 由 LLM 自动提取检测名词。 |
 | 🎯 **带标签占位符** | 插入一致的 AF 风格占位符，实现可靠的 SVG 映射。 |
 | 🧩 **SVG 生成** | 生成与插图对齐的可编辑 SVG 模板。 |
 | 🖥️ **嵌入式编辑器** | 使用内置的 svg-edit 在浏览器中直接编辑 SVG。 |
@@ -149,7 +149,7 @@ AutoFigure-edit 提供了一个可视化的 Web 界面，旨在实现无缝的�
 *   **供应商 (Provider):** 选择 LLM 供应商（OpenRouter、Bianxie 或 Gemini）。
 *   **优化 (Optimize):** 设置 SVG 模板的优化迭代次数（日常使用建议设为 `0`）。
 *   **参考图片 (Reference Image):** 上传目标图片以启用风格迁移功能。
-*   **分割后端:** 选择 OWL-ViT（默认，无需安装）、本地 SAM3 或 API 后端（fal.ai/Roboflow）。
+*   **分割后端:** 选择 YOLO-World（默认，无需额外安装）、OWL-ViT、本地 SAM3 或 API 后端（fal.ai/Roboflow）。勾选 **Auto Prompts** 可让 LLM 自动从方法文本提取检测名词。
 
 ### 2. 画布与编辑器
 <img src="img/demo_canvas.png" width="100%" alt="画布页面" style="border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px;"/>
@@ -162,7 +162,7 @@ AutoFigure-edit 提供了一个可视化的 Web 界面，旨在实现无缝的�
 
 ## 🧩 分割后端选项
 
-AutoFigure-edit 默认使用 **OWL-ViT**（Google 的零样本目标检测模型）作为分割后端。该模型在首次运行时会自动从 HuggingFace 下载 — 无需手动安装。
+AutoFigure-edit 默认使用 **YOLO-World**（ultralytics 零样本检测）作为分割后端（`--sam_backend yolo_world`）。只需执行 `pip install -r requirements.txt`，无需额外安装。**OWL-ViT** 也作为备选本地后端可用。
 
 ### 备选方案：SAM3（可选）
 
@@ -219,8 +219,9 @@ python autofigure2.py \
 
 - `--provider` (openrouter | bianxie | gemini)
 - `--image_model`, `--svg_model`
-- `--sam_prompt` (逗号分隔的提示词)
-- `--sam_backend` (owlvit [默认] | local | fal | roboflow | api)
+- `--sam_prompt` (逗号分隔的检测名词，如 `robot,camera,server`)
+- `--auto_prompts` (由 LLM 从方法文本自动提取检测名词；仅对 `yolo_world` 后端有效；失败时自动回退到 `--sam_prompt`)
+- `--sam_backend` (yolo_world [默认] | owlvit | local | fal | roboflow | api)
 - `--sam_api_key` (API Key，默认读取 `FAL_KEY` 或 `ROBOFLOW_API_KEY`)
 - `--sam_max_masks` (fal.ai 最大 masks，默认 32)
 - `--merge_threshold` (0 禁用合并)

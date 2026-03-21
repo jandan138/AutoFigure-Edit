@@ -2631,6 +2631,73 @@ Please carefully compare and check the following **TWO MAJOR ASPECTS with EIGHT 
 
 
 # ============================================================================
+# 自动生成 YOLO 提示词
+# ============================================================================
+
+def generate_yolo_prompts_from_method(
+    method_text: str,
+    api_key: str,
+    base_url: str,
+    provider: ProviderType,
+    model: str,
+) -> str | None:
+    """
+    从 method 文本自动生成 YOLO 检测提示词。
+
+    调用 LLM 从方法描述中提取具体视觉名词，用于 YOLO-World 零样本检测。
+
+    Args:
+        method_text: Paper method 文本
+        api_key: API Key
+        base_url: API base URL
+        provider: API 提供商
+        model: 使用的 LLM 模型
+
+    Returns:
+        逗号分隔的提示词字符串，失败返回 None
+    """
+    # method 文本过短时直接返回 None
+    if len(method_text.strip()) < 20:
+        return None
+
+    prompt = (
+        "You are helping configure a visual object detector for a scientific figure.\n"
+        "Given the following machine learning method description, list the specific visual object categories "
+        "that would appear as icons or pictograms in a diagram illustrating this method.\n"
+        "Output ONLY a comma-separated list of concrete visual nouns (5-15 items), one line, no explanation.\n"
+        "Good examples: robot,computer,person,folder,document,server,camera,graph,arrow,database\n"
+        "Bad examples: icon,diagram,component,module,element\n\n"
+        f"Method description:\n{method_text}"
+    )
+
+    try:
+        response = call_llm_text(
+            prompt=prompt,
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            provider=provider,
+            max_tokens=64,
+            temperature=0.2,
+        )
+        if not response:
+            return None
+
+        # 后处理：去空白 → 按逗号分割 → 过滤 → 重新拼接
+        items = [
+            item.strip()
+            for item in response.strip().split(",")
+            if item.strip() and " " not in item.strip() and len(item.strip()) <= 30
+        ]
+        if not items:
+            return None
+        return ",".join(items)
+    except Exception as e:
+        print(f"  [警告] 自动生成 YOLO 提示词失败: {e}")
+        return None
+
+
+# ============================================================================
 # 主函数：完整流程
 # ============================================================================
 
@@ -2643,6 +2710,7 @@ def method_to_svg(
     image_gen_model: str = None,
     svg_gen_model: str = None,
     sam_prompts: str = "icon",
+    auto_generate_prompts: bool = False,
     min_score: float = 0.5,
     sam_backend: Literal["local", "fal", "roboflow", "api", "owlvit", "yolo_world"] = "yolo_world",
     sam_api_key: Optional[str] = None,
@@ -2665,6 +2733,7 @@ def method_to_svg(
         image_gen_model: 生图模型
         svg_gen_model: SVG 生成模型
         sam_prompts: SAM3 文本提示，支持逗号分隔的多个prompt（如 "icon,diagram,arrow"）
+        auto_generate_prompts: 是否自动从 method_text 生成 YOLO 提示词（失败时回退到 sam_prompts）
         min_score: SAM3 最低置信度
         sam_backend: SAM3 后端（local/fal/roboflow/api/owlvit/yolo_world）
         sam_api_key: SAM3 API Key（api 模式使用）
@@ -2704,6 +2773,7 @@ def method_to_svg(
     print(f"生图模型: {image_gen_model}")
     print(f"SVG模型: {svg_gen_model}")
     print(f"SAM提示词: {sam_prompts}")
+    print(f"自动生成提示词: {auto_generate_prompts}")
     print(f"最低置信度: {min_score}")
     sam_backend_value = "fal" if sam_backend == "api" else sam_backend
     print(f"SAM后端: {sam_backend_value}")
@@ -2739,6 +2809,24 @@ def method_to_svg(
             "optimized_template_path": None,
             "final_svg_path": None,
         }
+
+    # 步骤 1.5：自动生成 YOLO 提示词
+    if auto_generate_prompts:
+        print("\n" + "-" * 50)
+        print("步骤 1.5：自动生成 YOLO 提示词")
+        print("-" * 50)
+        generated = generate_yolo_prompts_from_method(
+            method_text=method_text,
+            api_key=api_key,
+            base_url=base_url,
+            provider=provider,
+            model=svg_gen_model,
+        )
+        if generated:
+            sam_prompts = generated
+            print(f"  使用自动提示词: {sam_prompts}")
+        else:
+            print(f"  回退到手动提示词: {sam_prompts}")
 
     # 步骤二：SAM3 分割（包含Box合并）
     samed_path, boxlib_path, valid_boxes = segment_with_sam3(
@@ -2949,6 +3037,11 @@ if __name__ == "__main__":
 
     # SAM3 参数
     parser.add_argument("--sam_prompt", default="icon,robot,animal,person", help="SAM3 文本提示，支持逗号分隔多个prompt（如 'icon,diagram,arrow'，默认: icon）")
+    parser.add_argument(
+        "--auto_prompts",
+        action="store_true",
+        help="使用 LLM 自动从 method 文本生成 YOLO 提示词（忽略 --sam_prompt，失败时回退到 --sam_prompt）"
+    )
     parser.add_argument("--min_score", type=float, default=0.0, help="SAM3 最低置信度阈值（默认: 0.0）")
     parser.add_argument(
         "--sam_backend",
@@ -3028,6 +3121,7 @@ if __name__ == "__main__":
         image_gen_model=args.image_model,
         svg_gen_model=args.svg_model,
         sam_prompts=args.sam_prompt,
+        auto_generate_prompts=args.auto_prompts,
         min_score=args.min_score,
         sam_backend=args.sam_backend,
         sam_api_key=args.sam_api_key,

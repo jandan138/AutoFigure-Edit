@@ -40,7 +40,7 @@
 | Feature | Description |
 | :--- | :--- |
 | 📝 **Text-to-Figure** | Generate a draft figure directly from method text. |
-| 🧠 **Icon Detection** | Detect icon regions using OWL-ViT (default) or SAM3 from multiple prompts and merge overlaps. |
+| 🧠 **Icon Detection** | Detect icon regions using YOLO-World (default) or OWL-ViT/SAM3 from multiple prompts and merge overlaps. Supports LLM-driven automatic prompt extraction (`--auto_prompts`). |
 | 🎯 **Labeled Placeholders** | Insert consistent AF-style placeholders for reliable SVG mapping. |
 | 🧩 **SVG Generation** | Produce an editable SVG template aligned to the figure. |
 | 🖥️ **Embedded Editor** | Edit the SVG in-browser using the bundled svg-edit. |
@@ -154,7 +154,7 @@ On the start page, paste your paper's method text on the left. On the right, con
 *   **Provider:** Select your LLM provider (OpenRouter, Bianxie, or Gemini).
 *   **Optimize:** Set SVG template refinement iterations (recommend `0` for standard use).
 *   **Reference Image:** Upload a target image to enable style transfer.
-*   **Segmentation Backend:** Choose OWL-ViT (default, no install), local SAM3, or API backends (fal.ai/Roboflow).
+*   **Segmentation Backend:** Choose YOLO-World (default, no install), OWL-ViT, local SAM3, or API backends (fal.ai/Roboflow). Enable **Auto Prompts** to let the LLM derive detection nouns from your method text automatically.
 
 ### 2. Canvas & Editor
 <img src="img/demo_canvas.png" width="100%" alt="Canvas Page" style="border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px;"/>
@@ -167,7 +167,7 @@ The generation result loads directly into an integrated [SVG-Edit](https://githu
 
 ## 🧩 Segmentation Backend Options
 
-AutoFigure-edit uses **OWL-ViT** (Google's zero-shot object detection model) as the default segmentation backend. The model automatically downloads from HuggingFace on first run — no manual installation required.
+AutoFigure-edit uses **YOLO-World** (ultralytics zero-shot detection) as the default segmentation backend (`--sam_backend yolo_world`). No manual installation is required beyond `pip install -r requirements.txt`. **OWL-ViT** is also available as an alternative local backend.
 
 ### Alternative: SAM3 (Optional)
 
@@ -224,8 +224,9 @@ Common CLI flags:
 
 - `--provider` (openrouter | bianxie | gemini)
 - `--image_model`, `--svg_model`
-- `--sam_prompt` (comma-separated prompts)
-- `--sam_backend` (owlvit [default] | local | fal | roboflow | api)
+- `--sam_prompt` (comma-separated detection nouns, e.g. `robot,camera,server`)
+- `--auto_prompts` (let the LLM extract detection nouns from method text; `yolo_world` backend only; falls back to `--sam_prompt` on failure)
+- `--sam_backend` (yolo_world [default] | owlvit | local | fal | roboflow | api)
 - `--sam_api_key` (API key override; falls back to `FAL_KEY` or `ROBOFLOW_API_KEY`)
 - `--sam_max_masks` (fal.ai max masks, default 32)
 - `--merge_threshold` (0 disables merging)

@@ -48,6 +48,8 @@ The `method_to_svg()` function at line ~2390 orchestrates the full pipeline:
 
 **Segmentation backends:** `yolo_world` (default, YOLO-World zero-shot detection via ultralytics), `owlvit` (Google OWL-ViT), `local` (requires SAM3 installed), `fal` (fal.ai API), `roboflow` (Roboflow API), `api` (generic SAM API). Configured via `--sam_backend`.
 
+**Auto-prompt generation:** When `--auto_prompts` is set and `--sam_backend yolo_world` is active, the pipeline calls `call_llm_text()` before segmentation to extract 5–15 concrete detection nouns from the method text (e.g., `robot,camera,server`). The extracted string is used as the YOLO-World prompt. If LLM extraction fails, the pipeline falls back to `--sam_prompt`. Disabled by default (backward-compatible). Adds ~1–2 s latency and ~500 tokens per run.
+
 ### `server.py` — FastAPI Web Backend
 
 - Spawns `autofigure2.py` as a subprocess per job
@@ -66,6 +68,8 @@ The `method_to_svg()` function at line ~2390 orchestrates the full pipeline:
 
 - `--placeholder_mode`: `label` (recommended, gray fill + numbered labels), `box` (coordinates), `none`
 - `--sam_backend`: Segmentation backend (`yolo_world` [default], `owlvit`, `local`, `fal`, `roboflow`, `api`)
+- `--sam_prompt`: Comma-separated detection nouns passed to YOLO-World (e.g., `robot,camera,server`)
+- `--auto_prompts`: Let the LLM extract detection nouns from method text automatically (only effective with `yolo_world` backend); falls back to `--sam_prompt` on failure; disabled by default
 - `--merge_threshold`: IoU threshold for merging overlapping detections (0 disables)
 - `--optimize_iterations`: Number of LLM refinement passes on SVG template (0 skips)
 - `--reference_image_path`: Optional style reference image for generation
