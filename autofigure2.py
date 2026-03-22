@@ -1370,6 +1370,151 @@ def _segment_with_owlvit(
     return all_boxes
 
 
+def _segment_with_diagram_llm(
+    image: Image.Image,
+    api_key: str,
+    model: str,
+    base_url: str,
+    provider: str,
+    max_retries: int = 3,
+) -> list[dict]:
+    """
+    使用多模态 LLM 直接识别论文方法图中的流程框、渲染图等结构元素。
+
+    适合含文字框、箭头、嵌入渲染图的流程图类论文图，避免 YOLO-World 钻进渲染图内部。
+
+    Args:
+        image: PIL Image 对象
+        api_key: LLM API Key
+        model: LLM 模型名称
+        base_url: LLM API base URL
+        provider: LLM 提供商
+        max_retries: 最大重试次数
+
+    Returns:
+        检测到的 boxes 列表，每个 box 为 dict:
+        {"x1": int, "y1": int, "x2": int, "y2": int, "score": float, "prompt": str}
+        prompt 字段为元素类型：flow_box / rendered_image / code_block
+    """
+    import re
+
+    print("  使用多模态 LLM (diagram backend) 识别结构元素...")
+    w, h = image.size
+    print(f"  图片尺寸: {w} x {h}")
+
+    llm_prompt = (
+        "这是一张学术论文的方法图。请识别图中所有独立的视觉元素，分为以下类型：\n"
+        "- flow_box: 流程图/架构图中的矩形文字框、圆角框、节点（每个单独识别）\n"
+        "- rendered_image: 嵌入的照片/渲染图/真实场景截图（整体作为一个元素，不要识别其内部物体）\n"
+        "- code_block: 代码块或等宽字体文本框\n\n"
+        "规则：\n"
+        "- 箭头和连接线不需要识别\n"
+        "- 浮动的文字标注（如 \"mobile robot\", \"gripper\" 这类 annotation 箭头文字）不需要识别\n"
+        "- 渲染图内部的物体绝对不要单独识别，整张渲染图算一个元素\n"
+        "- bbox 用归一化坐标 [x1, y1, x2, y2]，范围 0.0~1.0，左上角为原点，右下角为(1,1)\n\n"
+        "只返回 JSON 数组，不要有任何其他文字、代码块标记或解释：\n"
+        "[{\"type\": \"flow_box\", \"label\": \"元素内的文字（简短）\", \"bbox\": [x1, y1, x2, y2]}, ...]"
+    )
+
+    all_boxes = []
+    temperature = 0.0
+
+    for attempt in range(max_retries):
+        print(f"  LLM 识别尝试 {attempt + 1}/{max_retries} (temperature={temperature:.1f})...")
+        try:
+            response = call_llm_multimodal(
+                contents=[llm_prompt, image],
+                api_key=api_key,
+                model=model,
+                base_url=base_url,
+                provider=provider,
+                max_tokens=4096,
+                temperature=temperature,
+            )
+        except Exception as e:
+            print(f"  LLM 调用失败: {type(e).__name__}: {str(e)[:200]}")
+            temperature += 0.1
+            continue
+
+        if not response:
+            print("  LLM 返回空响应")
+            temperature += 0.1
+            continue
+
+        # 解析 JSON
+        parsed = None
+        try:
+            parsed = json.loads(response.strip())
+        except json.JSONDecodeError:
+            # 尝试用正则提取第一个 [...] 块
+            match = re.search(r'\[.*\]', response, re.DOTALL)
+            if match:
+                try:
+                    parsed = json.loads(match.group(0))
+                except json.JSONDecodeError:
+                    pass
+
+        if parsed is None:
+            print(f"  JSON 解析失败，原始响应片段: {response[:200]}")
+            temperature += 0.1
+            continue
+
+        # 校验格式
+        valid_elems = []
+        for elem in parsed:
+            if not isinstance(elem, dict):
+                continue
+            if "type" not in elem or "bbox" not in elem:
+                continue
+            bbox = elem["bbox"]
+            if not isinstance(bbox, list) or len(bbox) != 4:
+                continue
+            if not all(isinstance(v, (int, float)) and 0.0 <= v <= 1.0 for v in bbox):
+                continue
+            valid_elems.append(elem)
+
+        if not valid_elems:
+            print(f"  校验后无有效元素，重试...")
+            temperature += 0.1
+            continue
+
+        print(f"  LLM 识别到 {len(valid_elems)} 个结构元素")
+
+        # 坐标还原 + 后处理
+        total_area = w * h
+        min_area = total_area * 0.0005  # 过滤面积 < 0.05% 的框
+
+        for elem in valid_elems:
+            bx1, by1, bx2, by2 = elem["bbox"]
+            x1 = max(0, int(bx1 * w))
+            y1 = max(0, int(by1 * h))
+            x2 = min(w, int(bx2 * w))
+            y2 = min(h, int(by2 * h))
+
+            # 过滤无效框
+            if x2 <= x1 or y2 <= y1:
+                continue
+            area = (x2 - x1) * (y2 - y1)
+            if area < min_area:
+                continue
+
+            elem_type = elem.get("type", "flow_box")
+            all_boxes.append({
+                "x1": x1,
+                "y1": y1,
+                "x2": x2,
+                "y2": y2,
+                "score": 1.0,
+                "prompt": elem_type,
+            })
+
+        print(f"  后处理后保留 {len(all_boxes)} 个有效框")
+        return all_boxes
+
+    print(f"  diagram backend: {max_retries} 次尝试均失败，返回空结果")
+    return []
+
+
 def _segment_with_yolo_world(
     image: Image.Image,
     prompt_list: list[str],
@@ -1431,9 +1576,13 @@ def segment_with_sam3(
     text_prompts: str = "icon",
     min_score: float = 0.5,
     merge_threshold: float = 0.9,
-    sam_backend: Literal["local", "fal", "roboflow", "api", "owlvit", "yolo_world"] = "yolo_world",
+    sam_backend: Literal["local", "fal", "roboflow", "api", "owlvit", "yolo_world", "diagram"] = "yolo_world",
     sam_api_key: Optional[str] = None,
     sam_max_masks: int = 32,
+    llm_api_key: Optional[str] = None,
+    llm_model: Optional[str] = None,
+    llm_base_url: Optional[str] = None,
+    llm_provider: Optional[str] = None,
 ) -> tuple[str, str, list]:
     """
     使用 SAM3 分割图片，用灰色填充+黑色边框+序号标记，生成 boxlib.json
@@ -1481,6 +1630,17 @@ def segment_with_sam3(
         total_detected = len(all_detected_boxes)
     elif backend == "owlvit":
         all_detected_boxes = _segment_with_owlvit(image, prompt_list, min_score)
+        total_detected = len(all_detected_boxes)
+    elif backend == "diagram":
+        if not all([llm_api_key, llm_model, llm_base_url, llm_provider]):
+            raise ValueError(
+                "diagram backend 需要提供 LLM 配置参数：llm_api_key, llm_model, llm_base_url, llm_provider"
+            )
+        if text_prompts and text_prompts != "icon":
+            print("  注意：diagram backend 不使用 text_prompts 参数，将被忽略")
+        all_detected_boxes = _segment_with_diagram_llm(
+            image, llm_api_key, llm_model, llm_base_url, llm_provider
+        )
         total_detected = len(all_detected_boxes)
     elif backend == "local":
         from sam3.model_builder import build_sam3_image_model
@@ -1600,7 +1760,10 @@ def segment_with_sam3(
     else:
         raise ValueError(f"未知 SAM3 后端: {sam_backend}")
 
-    print(f"\n总计检测: {total_detected} 个对象 (来自 {len(prompt_list)} 个 prompts)")
+    if backend == "diagram":
+        print(f"\n总计检测: {total_detected} 个对象 (diagram LLM 识别)")
+    else:
+        print(f"\n总计检测: {total_detected} 个对象 (来自 {len(prompt_list)} 个 prompts)")
 
     # 为所有检测到的 boxes 分配临时 id 和 label（用于合并）
     valid_boxes = []
@@ -2712,7 +2875,7 @@ def method_to_svg(
     sam_prompts: str = "icon",
     auto_generate_prompts: bool = False,
     min_score: float = 0.5,
-    sam_backend: Literal["local", "fal", "roboflow", "api", "owlvit", "yolo_world"] = "yolo_world",
+    sam_backend: Literal["local", "fal", "roboflow", "api", "owlvit", "yolo_world", "diagram"] = "yolo_world",
     sam_api_key: Optional[str] = None,
     sam_max_masks: int = 32,
     rmbg_model_path: Optional[str] = None,
@@ -2735,7 +2898,7 @@ def method_to_svg(
         sam_prompts: SAM3 文本提示，支持逗号分隔的多个prompt（如 "icon,diagram,arrow"）
         auto_generate_prompts: 是否自动从 method_text 生成 YOLO 提示词（失败时回退到 sam_prompts）
         min_score: SAM3 最低置信度
-        sam_backend: SAM3 后端（local/fal/roboflow/api/owlvit/yolo_world）
+        sam_backend: SAM3 后端（local/fal/roboflow/api/owlvit/yolo_world/diagram）
         sam_api_key: SAM3 API Key（api 模式使用）
         sam_max_masks: SAM3 API 最大 masks 数（api 模式使用）
         rmbg_model_path: RMBG 模型路径
@@ -2838,6 +3001,10 @@ def method_to_svg(
         sam_backend=sam_backend_value,
         sam_api_key=sam_api_key,
         sam_max_masks=sam_max_masks,
+        llm_api_key=api_key,
+        llm_model=model,
+        llm_base_url=base_url,
+        llm_provider=provider,
     )
 
     if len(valid_boxes) == 0:
@@ -3045,9 +3212,9 @@ if __name__ == "__main__":
     parser.add_argument("--min_score", type=float, default=0.0, help="SAM3 最低置信度阈值（默认: 0.0）")
     parser.add_argument(
         "--sam_backend",
-        choices=["local", "fal", "roboflow", "api", "owlvit", "yolo_world"],
+        choices=["local", "fal", "roboflow", "api", "owlvit", "yolo_world", "diagram"],
         default="yolo_world",
-        help="分割后端：yolo_world(YOLO-World零样本,推荐)/owlvit(OWL-ViT零样本)/local(SAM3本地,需权重)/fal(fal.ai API)/roboflow(Roboflow API)/api(旧别名=fal)",
+        help="分割后端：yolo_world(YOLO-World零样本,推荐)/owlvit(OWL-ViT零样本)/diagram(多模态LLM识别流程图结构)/local(SAM3本地,需权重)/fal(fal.ai API)/roboflow(Roboflow API)/api(旧别名=fal)",
     )
     parser.add_argument("--sam_api_key", default=None, help="SAM3 API Key（默认使用 FAL_KEY）")
     parser.add_argument(

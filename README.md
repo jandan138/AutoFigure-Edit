@@ -169,6 +169,21 @@ The generation result loads directly into an integrated [SVG-Edit](https://githu
 
 AutoFigure-edit uses **YOLO-World** (ultralytics zero-shot detection) as the default segmentation backend (`--sam_backend yolo_world`). No manual installation is required beyond `pip install -r requirements.txt`. **OWL-ViT** is also available as an alternative local backend.
 
+### Alternative: Diagram LLM Backend
+
+Use `--sam_backend diagram` for flowchart-style paper figures that contain labeled text boxes, arrows, and embedded renders (e.g., model architecture diagrams). Instead of running a detection model, it sends the figure to the multimodal LLM and classifies regions into three semantic types: `flow_box`, `rendered_image`, and `code_block`. No extra installation or API key is required — it reuses the main LLM credentials automatically.
+
+```bash
+python autofigure2.py \
+  --method_file paper.txt \
+  --output_dir outputs/demo \
+  --provider bianxie \
+  --api_key YOUR_KEY \
+  --sam_backend diagram
+```
+
+> Use `diagram` when YOLO-World under-detects structured diagram components. Use `yolo_world` for figures with photographic or icon-style content.
+
 ### Alternative: SAM3 (Optional)
 
 If you prefer SAM3, you can install it separately (not vendored in this repo). The upstream repo currently targets Python 3.12+, PyTorch 2.7+, and CUDA 12.6 for GPU builds.
@@ -226,7 +241,7 @@ Common CLI flags:
 - `--image_model`, `--svg_model`
 - `--sam_prompt` (comma-separated detection nouns, e.g. `robot,camera,server`)
 - `--auto_prompts` (let the LLM extract detection nouns from method text; `yolo_world` backend only; falls back to `--sam_prompt` on failure)
-- `--sam_backend` (yolo_world [default] | owlvit | local | fal | roboflow | api)
+- `--sam_backend` (yolo_world [default] | owlvit | diagram | local | fal | roboflow | api)
 - `--sam_api_key` (API key override; falls back to `FAL_KEY` or `ROBOFLOW_API_KEY`)
 - `--sam_max_masks` (fal.ai max masks, default 32)
 - `--merge_threshold` (0 disables merging)

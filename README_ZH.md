@@ -164,6 +164,21 @@ AutoFigure-edit 提供了一个可视化的 Web 界面，旨在实现无缝的�
 
 AutoFigure-edit 默认使用 **YOLO-World**（ultralytics 零样本检测）作为分割后端（`--sam_backend yolo_world`）。只需执行 `pip install -r requirements.txt`，无需额外安装。**OWL-ViT** 也作为备选本地后端可用。
 
+### 备选方案：Diagram LLM 后端
+
+对于包含文字框、箭头、嵌入渲染图的流程图类论文图（如模型架构图），推荐使用 `--sam_backend diagram`。该后端不运行检测模型，而是将图像发送给多模态 LLM，将区域分类为三种语义类型：`flow_box`（流程框）、`rendered_image`（嵌入渲染图）和 `code_block`（代码块）。无需额外安装或 API Key——自动复用主 LLM 凭据。
+
+```bash
+python autofigure2.py \
+  --method_file paper.txt \
+  --output_dir outputs/demo \
+  --provider bianxie \
+  --api_key YOUR_KEY \
+  --sam_backend diagram
+```
+
+> 当 YOLO-World 对结构化流程图组件检测效果不佳时，可切换为 `diagram`。对于含图标或照片风格内容的插图，仍建议使用 `yolo_world`。
+
 ### 备选方案：SAM3（可选）
 
 如果您更喜欢 SAM3，可以单独安装（本项目未包含）。上游仓库目前针对 GPU 构建要求 Python 3.12+、PyTorch 2.7+ 和 CUDA 12.6。
@@ -221,7 +236,7 @@ python autofigure2.py \
 - `--image_model`, `--svg_model`
 - `--sam_prompt` (逗号分隔的检测名词，如 `robot,camera,server`)
 - `--auto_prompts` (由 LLM 从方法文本自动提取检测名词；仅对 `yolo_world` 后端有效；失败时自动回退到 `--sam_prompt`)
-- `--sam_backend` (yolo_world [默认] | owlvit | local | fal | roboflow | api)
+- `--sam_backend` (yolo_world [默认] | owlvit | diagram | local | fal | roboflow | api)
 - `--sam_api_key` (API Key，默认读取 `FAL_KEY` 或 `ROBOFLOW_API_KEY`)
 - `--sam_max_masks` (fal.ai 最大 masks，默认 32)
 - `--merge_threshold` (0 禁用合并)

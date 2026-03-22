@@ -46,7 +46,7 @@ The `method_to_svg()` function at line ~2390 orchestrates the full pipeline:
 
 **LLM Provider abstraction:** Three providers (openrouter, bianxie, gemini) each have `_call_{provider}_text`, `_call_{provider}_multimodal`, and `_call_{provider}_image_generation` functions. The unified entry points are `call_llm_text()`, `call_llm_multimodal()`, and `call_llm_image_generation()`.
 
-**Segmentation backends:** `yolo_world` (default, YOLO-World zero-shot detection via ultralytics), `owlvit` (Google OWL-ViT), `local` (requires SAM3 installed), `fal` (fal.ai API), `roboflow` (Roboflow API), `api` (generic SAM API). Configured via `--sam_backend`.
+**Segmentation backends:** `yolo_world` (default, YOLO-World zero-shot detection via ultralytics), `owlvit` (Google OWL-ViT), `diagram` (multimodal LLM that classifies regions into `flow_box`, `rendered_image`, `code_block` — suited for flowchart-style paper figures with text boxes, arrows, and embedded renders), `local` (requires SAM3 installed), `fal` (fal.ai API), `roboflow` (Roboflow API), `api` (generic SAM API). Configured via `--sam_backend`. The `diagram` backend reuses the main LLM credentials automatically (no extra API key needed).
 
 **Auto-prompt generation:** When `--auto_prompts` is set and `--sam_backend yolo_world` is active, the pipeline calls `call_llm_text()` before segmentation to extract 5–15 concrete detection nouns from the method text (e.g., `robot,camera,server`). The extracted string is used as the YOLO-World prompt. If LLM extraction fails, the pipeline falls back to `--sam_prompt`. Disabled by default (backward-compatible). Adds ~1–2 s latency and ~500 tokens per run.
 
@@ -67,7 +67,7 @@ The `method_to_svg()` function at line ~2390 orchestrates the full pipeline:
 ## Key Configuration Flags
 
 - `--placeholder_mode`: `label` (recommended, gray fill + numbered labels), `box` (coordinates), `none`
-- `--sam_backend`: Segmentation backend (`yolo_world` [default], `owlvit`, `local`, `fal`, `roboflow`, `api`)
+- `--sam_backend`: Segmentation backend (`yolo_world` [default], `owlvit`, `diagram`, `local`, `fal`, `roboflow`, `api`). Use `diagram` for flowchart-style figures with text boxes/arrows/embedded renders; it calls the multimodal LLM and requires no extra install or API key.
 - `--sam_prompt`: Comma-separated detection nouns passed to YOLO-World (e.g., `robot,camera,server`)
 - `--auto_prompts`: Let the LLM extract detection nouns from method text automatically (only effective with `yolo_world` backend); falls back to `--sam_prompt` on failure; disabled by default
 - `--merge_threshold`: IoU threshold for merging overlapping detections (0 disables)
