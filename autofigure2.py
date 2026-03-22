@@ -1496,14 +1496,22 @@ def _segment_with_diagram_llm(
             x2 = min(w, int(bx2 * w))
             y2 = min(h, int(by2 * h))
 
+            # 对 text_block 类型添加 padding，防止文字边缘被截断
+            elem_type = elem.get("type", "flow_box")
+            if elem_type == "text_block":
+                padding_x = int((x2 - x1) * 0.2)  # 左右各扩展 20%
+                padding_y = max(2, int((y2 - y1) * 0.05))  # 上下至少 2px
+                x1 = max(0, x1 - padding_x)
+                x2 = min(w, x2 + padding_x)
+                y1 = max(0, y1 - padding_y)
+                y2 = min(h, y2 + padding_y)
+
             # 过滤无效框
             if x2 <= x1 or y2 <= y1:
                 continue
             area = (x2 - x1) * (y2 - y1)
             if area < min_area:
                 continue
-
-            elem_type = elem.get("type", "flow_box")
             all_boxes.append({
                 "x1": x1,
                 "y1": y1,
@@ -1981,6 +1989,23 @@ def crop_and_remove_background(
         label_clean = label.replace("<", "").replace(">", "")
 
         x1, y1, x2, y2 = box_info["x1"], box_info["y1"], box_info["x2"], box_info["y2"]
+
+        # 根据元素类型添加 padding，防止文字/边框被截断
+        elem_type = box_info.get("prompt", "")
+        if elem_type == "text_block":
+            padding_x = max(4, int((x2 - x1) * 0.05))
+            padding_y = max(2, int((y2 - y1) * 0.05))
+        elif elem_type == "flow_box":
+            padding_x = max(2, int((x2 - x1) * 0.02))
+            padding_y = max(2, int((y2 - y1) * 0.02))
+        else:
+            padding_x, padding_y = 0, 0
+
+        # 应用 padding 并限制在图片边界内
+        x1 = max(0, x1 - padding_x)
+        y1 = max(0, y1 - padding_y)
+        x2 = min(image.width, x2 + padding_x)
+        y2 = min(image.height, y2 + padding_y)
 
         cropped = image.crop((x1, y1, x2, y2))
         crop_path = icons_dir / f"icon_{label_clean}.png"
@@ -2486,6 +2511,9 @@ def get_svg_dimensions(svg_code: str) -> tuple[Optional[float], Optional[float]]
         match = re.search(pattern, svg_code, re.IGNORECASE)
         if match:
             value = match.group(1).strip()
+            # 跳过百分比单位
+            if '%' in value:
+                return None
             numeric_match = re.match(r'([\d.]+)', value)
             if numeric_match:
                 try:
@@ -2619,14 +2647,14 @@ def replace_icons_in_svg(
                 ]
 
                 rect_info = None
-                for rp in rect_patterns:
+                for i, rp in enumerate(rect_patterns):
                     rect_match = re.search(rp, g_content, re.IGNORECASE)
                     if rect_match:
                         groups = rect_match.groups()
                         if len(groups) == 4:
-                            if 'width' in rp[:50]:  # 第二种模式
+                            if i == 1:  # 第二种模式: width, height, x, y
                                 width, height, x, y = groups
-                            else:
+                            else:       # 第一种模式: x, y, width, height
                                 x, y, width, height = groups
                             rect_info = {
                                 'x': float(x),
@@ -2637,25 +2665,26 @@ def replace_icons_in_svg(
                             break
 
                 if rect_info:
-                    # 将 <g> 的 transform translate 值加到 rect 坐标上
-                    x = rect_info['x'] + translate_x
-                    y = rect_info['y'] + translate_y
-                    width, height = rect_info['width'], rect_info['height']
+                    # 优先使用 boxlib 的精确坐标（来自 icon_info），而非 LLM 生成的 rect 坐标
+                    # 应用坐标缩放（从原图像素到 SVG 坐标）和 transform 偏移
+                    orig_x1 = icon_info["x1"]
+                    orig_y1 = icon_info["y1"]
+                    orig_width = icon_info["width"]
+                    orig_height = icon_info["height"]
+
+                    x = orig_x1 * scale_x + translate_x
+                    y = orig_y1 * scale_y + translate_y
+                    width = orig_width * scale_x
+                    height = orig_height * scale_y
 
                     # 如果应用了 transform，输出提示
                     if translate_x != 0 or translate_y != 0:
                         print(f"  {label}: 检测到 <g> transform: translate({translate_x}, {translate_y})")
 
-                    # 创建 image 标签替换整个 <g>（保持 icon 宽高比，居中放置）
-                    icon_w, icon_h = icon_img.size
-                    placeholder_w, placeholder_h = float(width), float(height)
-                    _scale = min(placeholder_w / icon_w, placeholder_h / icon_h) if icon_w > 0 and icon_h > 0 else 1.0
-                    new_w, new_h = icon_w * _scale, icon_h * _scale
-                    center_x = float(x) + (placeholder_w - new_w) / 2
-                    center_y = float(y) + (placeholder_h - new_h) / 2
-                    image_tag = f'<image id="icon_{label_clean}" x="{center_x:.1f}" y="{center_y:.1f}" width="{new_w:.1f}" height="{new_h:.1f}" href="data:image/png;base64,{icon_b64}" preserveAspectRatio="xMidYMid meet"/>'
+                    # 创建 image 标签替换整个 <g>（使用 boxlib 精确尺寸，1:1 放置）
+                    image_tag = f'<image id="icon_{label_clean}" x="{x:.1f}" y="{y:.1f}" width="{width:.1f}" height="{height:.1f}" href="data:image/png;base64,{icon_b64}" preserveAspectRatio="xMidYMid meet"/>'
                     svg_content = svg_content.replace(g_content, image_tag)
-                    print(f"  {label}: 替换成功 (序号匹配 <g>) at ({center_x:.1f}, {center_y:.1f}) size {new_w:.1f}x{new_h:.1f}")
+                    print(f"  {label}: 替换成功 (序号匹配 <g>) at ({x:.1f}, {y:.1f}) size {width:.1f}x{height:.1f}")
                     replaced = True
 
             # 方式2：查找包含 label 文本的 <text> 元素附近的 <rect>

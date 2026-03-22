@@ -95,6 +95,16 @@ Extended `diagram` backend with two key enhancements:
 - Centers icon within placeholder using `preserveAspectRatio="xMidYMid meet"`
 - Prevents flow_box icons from being stretched/distorted when aspect ratios differ
 
+### 文字截断问题修复 (2026-03-22)
+
+修复了 diagram backend 下文字显示不全的问题：
+
+1. **Rect 属性解析修复**：修复了 `replace_icons_in_svg` 中 rect 正则匹配的顺序判断 bug，该 bug 导致坐标和尺寸对调
+2. **Text block padding**：为 `text_block` 类型的 bbox 增加 20% 水平 padding，防止 LLM 检测框偏小导致文字截断
+3. **Boxlib 坐标优先**：在 icon 替换时优先使用 boxlib 的精确坐标，而非 LLM 生成的占位符坐标
+4. **裁剪 padding**：根据元素类型（text_block/flow_box/rendered_image）在裁剪时添加不同量的 padding
+5. **SVG 百分比解析**：修复 `get_svg_dimensions` 对 `width="100%"` 的错误解析
+
 ## Language Notes
 
 Code comments and docstrings are primarily in Chinese. The codebase uses Python 3.10+ features (match statements, type unions with `|`).
