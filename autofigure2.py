@@ -3002,7 +3002,7 @@ def method_to_svg(
         sam_api_key=sam_api_key,
         sam_max_masks=sam_max_masks,
         llm_api_key=api_key,
-        llm_model=model,
+        llm_model=svg_gen_model,
         llm_base_url=base_url,
         llm_provider=provider,
     )
