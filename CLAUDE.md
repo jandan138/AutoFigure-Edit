@@ -46,7 +46,7 @@ The `method_to_svg()` function at line ~2390 orchestrates the full pipeline:
 
 **LLM Provider abstraction:** Three providers (openrouter, bianxie, gemini) each have `_call_{provider}_text`, `_call_{provider}_multimodal`, and `_call_{provider}_image_generation` functions. The unified entry points are `call_llm_text()`, `call_llm_multimodal()`, and `call_llm_image_generation()`.
 
-**Segmentation backends:** `yolo_world` (default, YOLO-World zero-shot detection via ultralytics), `owlvit` (Google OWL-ViT), `diagram` (multimodal LLM that classifies regions into `flow_box`, `rendered_image`, `code_block` — suited for flowchart-style paper figures with text boxes, arrows, and embedded renders), `local` (requires SAM3 installed), `fal` (fal.ai API), `roboflow` (Roboflow API), `api` (generic SAM API). Configured via `--sam_backend`. The `diagram` backend reuses the main LLM credentials automatically (no extra API key needed).
+**Segmentation backends:** `yolo_world` (default, YOLO-World zero-shot detection via ultralytics), `owlvit` (Google OWL-ViT), `diagram` (multimodal LLM that classifies regions into `flow_box`, `text_block`, `rendered_image`, `code_block` — suited for flowchart-style paper figures with text boxes, bullet point annotations, arrows, and embedded renders), `local` (requires SAM3 installed), `fal` (fal.ai API), `roboflow` (Roboflow API), `api` (generic SAM API). Configured via `--sam_backend`. The `diagram` backend reuses the main LLM credentials automatically (no extra API key needed) and skips background removal to preserve visual styling.
 
 **Auto-prompt generation:** When `--auto_prompts` is set and `--sam_backend yolo_world` is active, the pipeline calls `call_llm_text()` before segmentation to extract 5–15 concrete detection nouns from the method text (e.g., `robot,camera,server`). The extracted string is used as the YOLO-World prompt. If LLM extraction fails, the pipeline falls back to `--sam_prompt`. Disabled by default (backward-compatible). Adds ~1–2 s latency and ~500 tokens per run.
 
@@ -73,6 +73,27 @@ The `method_to_svg()` function at line ~2390 orchestrates the full pipeline:
 - `--merge_threshold`: IoU threshold for merging overlapping detections (0 disables)
 - `--optimize_iterations`: Number of LLM refinement passes on SVG template (0 skips)
 - `--reference_image_path`: Optional style reference image for generation
+
+## Recent Improvements (2026-03)
+
+### Diagram Backend v2
+Extended `diagram` backend with two key enhancements:
+
+1. **`text_block` element type** (`_segment_with_diagram_llm`): Detects floating text regions outside flow boxes (bullet points, captions, figure titles) as separate elements.
+
+2. **`skip_rembg` parameter** (`crop_and_remove_background`): When using `diagram` backend, crops are copied directly to `_nobg.png` without background removal, preserving borders and visual styling of flow boxes and rendered scenes.
+
+### SVG Template Size Locking
+`generate_svg_template` now validates SVG dimensions against the original image:
+- Added `_check_svg_size_matches()` helper to verify width/height within 5% threshold
+- Retry loop with warning prompt (up to `max_size_retries=2` times) when LLM generates wrong canvas size
+- Prevents coordinate drift from scale factors (e.g., `scale_y=1.23`) in step 4.7
+
+### Icon Aspect Ratio Preservation
+`replace_icons_in_svg` now preserves original icon proportions:
+- Calculates `scale = min(placeholder_w/icon_w, placeholder_h/icon_h)` for fit-in-box sizing
+- Centers icon within placeholder using `preserveAspectRatio="xMidYMid meet"`
+- Prevents flow_box icons from being stretched/distorted when aspect ratios differ
 
 ## Language Notes
 
