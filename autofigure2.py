@@ -1996,8 +1996,8 @@ def crop_and_remove_background(
             padding_x = max(4, int((x2 - x1) * 0.05))
             padding_y = max(2, int((y2 - y1) * 0.05))
         elif elem_type == "flow_box":
-            padding_x = max(2, int((x2 - x1) * 0.02))
-            padding_y = max(2, int((y2 - y1) * 0.02))
+            padding_x = max(25, int((x2 - x1) * 0.25))  # 至少 25px 或 25%，防止文字截断
+            padding_y = max(10, int((y2 - y1) * 0.10))  # 垂直方向 10%
         else:
             padding_x, padding_y = 0, 0
 
