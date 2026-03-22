@@ -1394,7 +1394,7 @@ def _segment_with_diagram_llm(
     Returns:
         检测到的 boxes 列表，每个 box 为 dict:
         {"x1": int, "y1": int, "x2": int, "y2": int, "score": float, "prompt": str}
-        prompt 字段为元素类型：flow_box / rendered_image / code_block
+        prompt 字段为元素类型：flow_box / text_block / rendered_image / code_block
     """
     import re
 
@@ -1404,16 +1404,21 @@ def _segment_with_diagram_llm(
 
     llm_prompt = (
         "这是一张学术论文的方法图。请识别图中所有独立的视觉元素，分为以下类型：\n"
-        "- flow_box: 流程图/架构图中的矩形文字框、圆角框、节点（每个单独识别）\n"
-        "- rendered_image: 嵌入的照片/渲染图/真实场景截图（整体作为一个元素，不要识别其内部物体）\n"
-        "- code_block: 代码块或等宽字体文本框\n\n"
+        "- flow_box: 有明显可见边框/矩形边界的文字框、圆角框、节点（每个单独识别）\n"
+        "- text_block: 流程框外的浮动文字区域，如每个框下方的 bullet point 说明、"
+        "图注标题、章节标题等。同一列/组的连续文字合并为一个 text_block\n"
+        "- rendered_image: 嵌入的照片/渲染图/真实场景截图（整体作为一个元素，"
+        "含图内箭头标注文字，不要识别其内部物体）\n"
+        "- code_block: 代码块或等宽字体文本框（有底色或边框）\n\n"
         "规则：\n"
-        "- 箭头和连接线不需要识别\n"
-        "- 浮动的文字标注（如 \"mobile robot\", \"gripper\" 这类 annotation 箭头文字）不需要识别\n"
-        "- 渲染图内部的物体绝对不要单独识别，整张渲染图算一个元素\n"
-        "- bbox 用归一化坐标 [x1, y1, x2, y2]，范围 0.0~1.0，左上角为原点，右下角为(1,1)\n\n"
+        "- 箭头、连接线、坐标轴不需要识别\n"
+        "- flow_box 和 text_block 的唯一区别：flow_box 有可见边框，text_block 没有边框\n"
+        "- 渲染图内的箭头标注文字（如 'gripper', 'mobile robot'）属于 rendered_image，"
+        "不要单独识别为 text_block\n"
+        "- bbox 用归一化坐标 [x1, y1, x2, y2]，范围 0.0~1.0，左上角为原点\n\n"
         "只返回 JSON 数组，不要有任何其他文字、代码块标记或解释：\n"
-        "[{\"type\": \"flow_box\", \"label\": \"元素内的文字（简短）\", \"bbox\": [x1, y1, x2, y2]}, ...]"
+        "[{\"type\": \"flow_box\", \"label\": \"元素内的文字（简短）\", "
+        "\"bbox\": [x1, y1, x2, y2]}, ...]"
     )
 
     all_boxes = []
@@ -1931,9 +1936,14 @@ def crop_and_remove_background(
     boxlib_path: str,
     output_dir: str,
     rmbg_model_path: Optional[str] = None,
+    skip_rembg: bool = False,
 ) -> list[dict]:
     """
-    根据 boxlib.json 裁切图片并使用 RMBG2 去背景
+    根据 boxlib.json 裁切图片并去背景
+
+    Args:
+        skip_rembg: 为 True 时跳过去背景，直接将裁切图复制为 _nobg.png（用于
+                    diagram backend，保留框线、背景等完整视觉内容）
 
     文件命名使用 label: icon_AF01.png, icon_AF01_nobg.png
     """
@@ -1956,12 +1966,12 @@ def crop_and_remove_background(
         return []
 
     remover = None
-    # 优先使用 rembg（无需 HuggingFace 权限），回退到 RMBG-2.0
-    try:
-        remover = RembgRemover(output_dir=icons_dir)
-    except ImportError:
-        print("  rembg 未安装，尝试使用 RMBG-2.0...")
-        remover = BriaRMBG2Remover(model_path=rmbg_model_path, output_dir=icons_dir)
+    if not skip_rembg:
+        try:
+            remover = RembgRemover(output_dir=icons_dir)
+        except ImportError:
+            print("  rembg 未安装，尝试使用 RMBG-2.0...")
+            remover = BriaRMBG2Remover(model_path=rmbg_model_path, output_dir=icons_dir)
 
     icon_infos = []
     for box_info in boxes:
@@ -1976,7 +1986,15 @@ def crop_and_remove_background(
         crop_path = icons_dir / f"icon_{label_clean}.png"
         cropped.save(crop_path)
 
-        nobg_path = remover.remove_background(cropped, f"icon_{label_clean}")
+        if skip_rembg:
+            # 直接将原始裁剪图复制到 nobg 路径，保留完整视觉内容（框线、背景）
+            nobg_out = icons_dir / f"icon_{label_clean}_nobg.png"
+            cropped.save(nobg_out)
+            nobg_path = str(nobg_out)
+            print(f"  {label}: 裁切完成（跳过去背景）-> {nobg_path}")
+        else:
+            nobg_path = remover.remove_background(cropped, f"icon_{label_clean}")
+            print(f"  {label}: 裁切并去背景完成 -> {nobg_path}")
 
         icon_infos.append({
             "id": box_id,
@@ -1988,9 +2006,8 @@ def crop_and_remove_background(
             "nobg_path": nobg_path,
         })
 
-        print(f"  {label}: 裁切并去背景完成 -> {nobg_path}")
-
-    del remover
+    if remover is not None:
+        del remover
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
@@ -3040,6 +3057,7 @@ def method_to_svg(
         boxlib_path=boxlib_path,
         output_dir=str(output_dir),
         rmbg_model_path=rmbg_model_path,
+        skip_rembg=(sam_backend_value == "diagram"),
     )
 
     if stop_after == 3:
