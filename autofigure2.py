@@ -2028,6 +2028,8 @@ def generate_svg_template(
     base_url: str,
     provider: ProviderType,
     placeholder_mode: PlaceholderMode = "label",
+    max_size_retries: int = 2,
+    size_threshold: float = 0.05,
 ) -> str:
     """
     使用多模态 LLM 生成 SVG 代码
@@ -2099,25 +2101,77 @@ Please output ONLY the SVG code, starting with <svg and ending with </svg>. Do n
 Please output ONLY the SVG code, starting with <svg and ending with </svg>. Do not include any explanation or markdown formatting."""
 
     contents = [prompt_text, figure_img, samed_img]
-
     print(f"发送多模态请求到: {base_url}")
 
-    content = call_llm_multimodal(
-        contents=contents,
-        api_key=api_key,
-        model=model,
-        base_url=base_url,
-        provider=provider,
-        max_tokens=50000,
-    )
+    svg_code = None
+    last_svg_w, last_svg_h = None, None
 
-    if not content:
-        raise Exception('API 响应中没有内容')
+    for attempt in range(max_size_retries + 1):
+        if attempt > 0:
+            size_info = (
+                f"{last_svg_w:.0f} x {last_svg_h:.0f}"
+                if (last_svg_w is not None and last_svg_h is not None)
+                else "未知"
+            )
+            retry_warning = f"""
 
-    svg_code = extract_svg_code(content)
+⚠️ 上次生成的 SVG 尺寸不正确！
+原图尺寸: {figure_width} x {figure_height}
+你生成的: {size_info}
 
-    if not svg_code:
-        raise Exception('无法从响应中提取 SVG 代码')
+请重新生成，必须严格使用：
+  width="{figure_width}" height="{figure_height}"
+  viewBox="0 0 {figure_width} {figure_height}"
+所有坐标必须在此画布内。这是第 {attempt + 1}/{max_size_retries + 1} 次尝试。
+"""
+            current_prompt = prompt_text + retry_warning
+            contents = [current_prompt, figure_img, samed_img]
+
+        content = call_llm_multimodal(
+            contents=contents,
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            provider=provider,
+            max_tokens=50000,
+        )
+
+        if not content:
+            raise Exception('API 响应中没有内容')
+
+        candidate = extract_svg_code(content)
+        if not candidate:
+            if attempt < max_size_retries:
+                print(f"  [尺寸重试 {attempt+1}] 无法提取 SVG，重试...")
+                continue
+            raise Exception('无法从响应中提取 SVG 代码')
+
+        size_ok, last_svg_w, last_svg_h = _check_svg_size_matches(
+            candidate, figure_width, figure_height, size_threshold
+        )
+        svg_code = candidate
+
+        if size_ok:
+            if attempt > 0:
+                print(f"  [尺寸重试 {attempt}] 尺寸验证通过: {last_svg_w:.0f} x {last_svg_h:.0f}")
+            break
+        else:
+            size_repr = (
+                f"{last_svg_w:.0f} x {last_svg_h:.0f}"
+                if (last_svg_w is not None and last_svg_h is not None)
+                else "无法解析"
+            )
+            if attempt < max_size_retries:
+                print(
+                    f"  [尺寸重试 {attempt+1}/{max_size_retries}] SVG 尺寸错误 "
+                    f"({size_repr}，期望 {figure_width} x {figure_height})，重试..."
+                )
+            else:
+                print(
+                    f"  WARN: 尺寸验证失败（{max_size_retries + 1} 次均未通过）。"
+                    f"生成尺寸: {size_repr}，期望: {figure_width} x {figure_height}。"
+                    f"继续使用最后一次结果，步骤 4.7 将应用缩放修正。"
+                )
 
     # 步骤 4.5：SVG 语法验证和修复
     svg_code = check_and_fix_svg(
@@ -2357,6 +2411,34 @@ def calculate_scale_factors(
     return scale_x, scale_y
 
 
+def _check_svg_size_matches(
+    svg_code: str,
+    expected_w: int,
+    expected_h: int,
+    threshold: float = 0.05,
+) -> tuple[bool, float | None, float | None]:
+    """
+    验证 SVG 尺寸是否匹配预期。
+
+    Returns (size_ok, svg_w, svg_h)
+    size_ok=True → 尺寸在阈值范围内
+    size_ok=False → 尺寸不匹配或无法解析
+    """
+    svg_w, svg_h = get_svg_dimensions(svg_code)
+    if svg_w is None or svg_h is None:
+        return False, None, None
+
+    # 检测百分比 masquerading (如 width="100%" 被解析为 100.0)
+    if svg_w <= 100 or svg_h <= 100:
+        return False, svg_w, svg_h
+
+    diff_w = abs(svg_w - expected_w) / expected_w
+    diff_h = abs(svg_h - expected_h) / expected_h
+    if diff_w > threshold or diff_h > threshold:
+        return False, svg_w, svg_h
+    return True, svg_w, svg_h
+
+
 # ============================================================================
 # 步骤五：图标替换到 SVG（支持序号匹配）
 # ============================================================================
@@ -2460,10 +2542,16 @@ def replace_icons_in_svg(
                     if translate_x != 0 or translate_y != 0:
                         print(f"  {label}: 检测到 <g> transform: translate({translate_x}, {translate_y})")
 
-                    # 创建 image 标签替换整个 <g>
-                    image_tag = f'<image id="icon_{label_clean}" x="{x}" y="{y}" width="{width}" height="{height}" href="data:image/png;base64,{icon_b64}" preserveAspectRatio="xMidYMid meet"/>'
+                    # 创建 image 标签替换整个 <g>（保持 icon 宽高比，居中放置）
+                    icon_w, icon_h = icon_img.size
+                    placeholder_w, placeholder_h = float(width), float(height)
+                    _scale = min(placeholder_w / icon_w, placeholder_h / icon_h) if icon_w > 0 and icon_h > 0 else 1.0
+                    new_w, new_h = icon_w * _scale, icon_h * _scale
+                    center_x = float(x) + (placeholder_w - new_w) / 2
+                    center_y = float(y) + (placeholder_h - new_h) / 2
+                    image_tag = f'<image id="icon_{label_clean}" x="{center_x:.1f}" y="{center_y:.1f}" width="{new_w:.1f}" height="{new_h:.1f}" href="data:image/png;base64,{icon_b64}" preserveAspectRatio="xMidYMid meet"/>'
                     svg_content = svg_content.replace(g_content, image_tag)
-                    print(f"  {label}: 替换成功 (序号匹配 <g>) at ({x}, {y}) size {width}x{height}")
+                    print(f"  {label}: 替换成功 (序号匹配 <g>) at ({center_x:.1f}, {center_y:.1f}) size {new_w:.1f}x{new_h:.1f}")
                     replaced = True
 
             # 方式2：查找包含 label 文本的 <text> 元素附近的 <rect>
@@ -2499,15 +2587,21 @@ def replace_icons_in_svg(
                                 width = float(w_match.group(1))
                                 height = float(h_match.group(1))
 
-                                # 替换 rect 和 text
-                                image_tag = f'<image id="icon_{label_clean}" x="{x}" y="{y}" width="{width}" height="{height}" href="data:image/png;base64,{icon_b64}" preserveAspectRatio="xMidYMid meet"/>'
+                                # 替换 rect 和 text（保持 icon 宽高比，居中放置）
+                                icon_w, icon_h = icon_img.size
+                                placeholder_w, placeholder_h = float(width), float(height)
+                                _scale = min(placeholder_w / icon_w, placeholder_h / icon_h) if icon_w > 0 and icon_h > 0 else 1.0
+                                new_w, new_h = icon_w * _scale, icon_h * _scale
+                                center_x = float(x) + (placeholder_w - new_w) / 2
+                                center_y = float(y) + (placeholder_h - new_h) / 2
+                                image_tag = f'<image id="icon_{label_clean}" x="{center_x:.1f}" y="{center_y:.1f}" width="{new_w:.1f}" height="{new_h:.1f}" href="data:image/png;base64,{icon_b64}" preserveAspectRatio="xMidYMid meet"/>'
 
                                 # 删除 text
                                 svg_content = svg_content.replace(text_match.group(0), '')
                                 # 替换 rect
                                 svg_content = svg_content.replace(rect_content, image_tag, 1)
 
-                                print(f"  {label}: 替换成功 (序号匹配 <text>) at ({x}, {y}) size {width}x{height}")
+                                print(f"  {label}: 替换成功 (序号匹配 <text>) at ({center_x:.1f}, {center_y:.1f}) size {new_w:.1f}x{new_h:.1f}")
                                 replaced = True
                                 break
 
@@ -2521,7 +2615,13 @@ def replace_icons_in_svg(
             width = orig_width * scale_x
             height = orig_height * scale_y
 
-            image_tag = f'<image id="icon_{label_clean}" x="{x1:.1f}" y="{y1:.1f}" width="{width:.1f}" height="{height:.1f}" href="data:image/png;base64,{icon_b64}" preserveAspectRatio="xMidYMid meet"/>'
+            icon_w, icon_h = icon_img.size
+            placeholder_w, placeholder_h = float(width), float(height)
+            _scale = min(placeholder_w / icon_w, placeholder_h / icon_h) if icon_w > 0 and icon_h > 0 else 1.0
+            new_w, new_h = icon_w * _scale, icon_h * _scale
+            center_x = float(x1) + (placeholder_w - new_w) / 2
+            center_y = float(y1) + (placeholder_h - new_h) / 2
+            image_tag = f'<image id="icon_{label_clean}" x="{center_x:.1f}" y="{center_y:.1f}" width="{new_w:.1f}" height="{new_h:.1f}" href="data:image/png;base64,{icon_b64}" preserveAspectRatio="xMidYMid meet"/>'
 
             x1_int, y1_int = int(round(x1)), int(round(y1))
 
@@ -2558,9 +2658,15 @@ def replace_icons_in_svg(
             width = orig_width * scale_x
             height = orig_height * scale_y
 
-            image_tag = f'<image id="icon_{label_clean}" x="{x1:.1f}" y="{y1:.1f}" width="{width:.1f}" height="{height:.1f}" href="data:image/png;base64,{icon_b64}" preserveAspectRatio="xMidYMid meet"/>'
+            icon_w, icon_h = icon_img.size
+            placeholder_w, placeholder_h = float(width), float(height)
+            _scale = min(placeholder_w / icon_w, placeholder_h / icon_h) if icon_w > 0 and icon_h > 0 else 1.0
+            new_w, new_h = icon_w * _scale, icon_h * _scale
+            center_x = float(x1) + (placeholder_w - new_w) / 2
+            center_y = float(y1) + (placeholder_h - new_h) / 2
+            image_tag = f'<image id="icon_{label_clean}" x="{center_x:.1f}" y="{center_y:.1f}" width="{new_w:.1f}" height="{new_h:.1f}" href="data:image/png;base64,{icon_b64}" preserveAspectRatio="xMidYMid meet"/>'
             svg_content = svg_content.replace('</svg>', f'  {image_tag}\n</svg>')
-            print(f"  {label}: 追加到 SVG at ({x1:.1f}, {y1:.1f}) (未找到匹配的占位符)")
+            print(f"  {label}: 追加到 SVG at ({center_x:.1f}, {center_y:.1f}) (未找到匹配的占位符)")
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
