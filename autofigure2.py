@@ -2078,10 +2078,21 @@ Use these coordinates to accurately position your icon placeholders in the SVG.
 Please output ONLY the SVG code, starting with <svg and ending with </svg>. Do not include any explanation or markdown formatting."""
 
     elif placeholder_mode == "label":
-        # label 模式：要求占位符样式与 samed.png 一致
-        prompt_text = base_prompt + """
+        # label 模式：要求占位符样式与 samed.png 一致，并注入数量约束
+        with open(boxlib_path, 'r', encoding='utf-8') as f:
+            boxlib_data = json.load(f)
+        n_placeholders = len(boxlib_data.get("boxes", []))
+        required_labels = ', '.join([f"<AF>{i+1:02d}" for i in range(n_placeholders)])
+
+        prompt_text = base_prompt + f"""
 PLACEHOLDER STYLE REQUIREMENT:
 Look at the second image (samed.png) - each icon area is marked with a gray rectangle (#808080), black border, and a centered label like <AF>01, <AF>02, etc.
+
+CRITICAL PLACEHOLDER COUNT:
+The second image contains EXACTLY {n_placeholders} icon placeholders.
+You MUST generate ALL {n_placeholders} <g> placeholder elements with these exact IDs:
+{required_labels}
+Missing any placeholder will cause icon replacement to fail.
 
 Your SVG placeholders MUST match this exact style:
 - Rectangle with fill="#808080" and stroke="black" stroke-width="2"
@@ -2181,6 +2192,15 @@ Please output ONLY the SVG code, starting with <svg and ending with </svg>. Do n
         base_url=base_url,
         provider=provider,
     )
+
+    # 步骤 4.6：补全缺失的占位符（仅 label 模式）
+    if placeholder_mode == "label":
+        svg_code = inject_missing_placeholders(
+            svg_code=svg_code,
+            boxlib_path=boxlib_path,
+            figure_width=figure_width,
+            figure_height=figure_height,
+        )
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2355,6 +2375,90 @@ def check_and_fix_svg(
             provider=provider,
         )
         return fixed_svg
+
+
+# ============================================================================
+# 步骤 4.6：补全缺失的占位符
+# ============================================================================
+
+def inject_missing_placeholders(
+    svg_code: str,
+    boxlib_path: str,
+    figure_width: int,
+    figure_height: int,
+) -> str:
+    """
+    解析已生成的 SVG，检测缺失的 <g id="AF\\d+"> 占位符，根据 boxlib.json 补全。
+
+    Returns:
+        补全后的 SVG 代码
+    """
+    # 读取 boxlib
+    with open(boxlib_path, 'r', encoding='utf-8') as f:
+        boxlib = json.load(f)
+
+    boxes = boxlib.get("boxes", [])
+    if not boxes:
+        return svg_code
+
+    # 获取 SVG 尺寸
+    svg_w, svg_h = get_svg_dimensions(svg_code)
+    if svg_w is None or svg_h is None:
+        svg_w, svg_h = figure_width, figure_height
+
+    # 计算缩放因子（如果需要）
+    scale_x = svg_w / figure_width
+    scale_y = svg_h / figure_height
+
+    # 找出已存在的占位符 ID（大写规范化比较）
+    existing_ids = set(
+        e.upper()
+        for e in re.findall(r'<g[^>]*\bid=["\']?(AF\d+)["\']?[^>]*>', svg_code, re.IGNORECASE)
+    )
+
+    # 计算缺失的占位符
+    missing_placeholders = []
+    for box in boxes:
+        label_clean = box["label"].replace("<", "").replace(">", "")  # AF01
+        if label_clean.upper() not in existing_ids:
+            missing_placeholders.append(box)
+
+    if not missing_placeholders:
+        return svg_code
+
+    print(f"  检测到 {len(missing_placeholders)} 个缺失占位符，正在补全...")
+
+    # 生成缺失占位符的 <g> 元素并在 </svg> 前插入
+    insertions = []
+    for box in missing_placeholders:
+        label = box["label"]          # <AF>01
+        label_clean = label.replace("<", "").replace(">", "")  # AF01
+        x1 = int(box["x1"] * scale_x)
+        y1 = int(box["y1"] * scale_y)
+        w = int((box["x2"] - box["x1"]) * scale_x)
+        h = int((box["y2"] - box["y1"]) * scale_y)
+
+        # 确保最小尺寸
+        w = max(w, 20)
+        h = max(h, 20)
+
+        label_escaped = label.replace('<', '&lt;').replace('>', '&gt;')
+        g_element = (
+            f'  <g id="{label_clean}">\n'
+            f'    <rect x="{x1}" y="{y1}" width="{w}" height="{h}" '
+            f'fill="#808080" stroke="black" stroke-width="2"/>\n'
+            f'    <text x="{x1 + w // 2}" y="{y1 + h // 2}" '
+            f'text-anchor="middle" dominant-baseline="middle" '
+            f'fill="white" font-size="14">{label_escaped}</text>\n'
+            f'  </g>\n'
+        )
+        insertions.append(g_element)
+        print(f"    补全占位符: {label_clean} at ({x1}, {y1}, {w}x{h})")
+
+    insert_code = ''.join(insertions)
+    svg_code = svg_code.replace('</svg>', insert_code + '</svg>')
+
+    return svg_code
 
 
 # ============================================================================
